@@ -28,17 +28,50 @@ export async function requestOrientationPermission(): Promise<boolean> {
 }
 
 /**
+ * Fixed basis conversion from the device's own physical axes (W3C spec: X = device's
+ * right edge as viewed face-on, Y = device's top edge, Z = out of the screen toward the
+ * viewer) to HeadFrame (+X anterior, +Y left, +Z superior).
+ *
+ * Assumes the natural "phone represents my head" hold: upright, portrait, screen facing
+ * the user (like a mirror/selfie). Under that hold:
+ *   - device +Z (out of the screen, toward the real viewer) is the modeled head's own
+ *     forward/anterior direction too, since the screen and the (would-be) face point the
+ *     same way -> device +Z = HeadFrame +X.
+ *   - device +Y (top of screen) is "up" either way -> device +Y = HeadFrame +Z.
+ *   - device +X (the phone's own labeled right edge, which is on the REAL viewer's right
+ *     as they hold it facing themselves) corresponds to the MODELED head's LEFT side --
+ *     the same anatomical left/right flip that happens facing another person (their
+ *     right hand is near your left) -> device +X = HeadFrame +Y.
+ * Verified this is a proper (non-reflected) rotation by checking it preserves the
+ * right-handedness relation X*Y=Z: device_X x device_Y = device_Z maps to
+ * HeadFrame_Y x HeadFrame_Z = HeadFrame_X, which holds (a cyclic permutation of
+ * HeadFrame's own X*Y=Z rule) -- and independently confirmed by direct numeric
+ * substitution (rotate_z(90deg) then rotate_y(90deg) sends device X/Y/Z to exactly
+ * HeadFrame Y/Z/X), not assumed from the algebra alone.
+ *
+ * This previously was NOT applied -- the raw device quaternion's own axis labels were
+ * used directly as HeadFrame axes, which only happens to be correct if the phone is
+ * held flat (screen up, lying on a table). Held upright against the natural convention
+ * above, that produced exactly the reported symptoms: device yaw (about device Y)
+ * nodding the head instead of turning it, tilt (about device X) rolling instead of
+ * pitching, and a mirrored left/right turn direction.
+ */
+const DEVICE_TO_HEAD_FRAME: Quat = quatCompose(
+  quatFromAxisAngle(v3(0, 1, 0), 90 * DEG2RAD),
+  quatFromAxisAngle(v3(0, 0, 1), 90 * DEG2RAD)
+);
+const HEAD_FRAME_TO_DEVICE: Quat = quatInvert(DEVICE_TO_HEAD_FRAME);
+
+/**
  * Wraps the browser's DeviceOrientationEvent and exposes it as an OrientationSource.
  *
  * The raw device orientation (alpha/beta/gamma, W3C intrinsic Z-X'-Y'' Tait-Bryan
- * angles) is converted to a quaternion, then expressed RELATIVE to a calibrated "zero"
- * pose captured whenever calibrateZero() is called. We deliberately do not attempt to
- * map the phone's own axes onto anatomical HeadFrame axes (right/screen-top/etc.) --
- * that would require the user to hold the phone in one precisely specified way. Instead,
- * whatever raw orientation is current when the user taps "zero" (holding the phone
- * however feels like their head's neutral upright pose) becomes identity, and subsequent
- * physical tilts of the phone are fed to the physics pipeline as the equivalent relative
- * head tilt. This is a deliberate v1 simplification, flagged here rather than hidden.
+ * angles) is converted to a quaternion in the device's own axis labels, re-expressed in
+ * HeadFrame via the fixed DEVICE_TO_HEAD_FRAME conversion above, then expressed RELATIVE
+ * to a calibrated "zero" pose captured whenever calibrateZero() is called -- so even if
+ * the user doesn't hold the phone in exactly the assumed reference pose, calibration
+ * absorbs any residual fixed offset; the DEVICE_TO_HEAD_FRAME conversion is what makes
+ * ongoing relative motions (yaw/pitch/roll) map onto the correct HeadFrame axes.
  */
 export class DeviceOrientationSource implements OrientationSource {
   private latestRaw: Quat | null = null;
@@ -73,7 +106,13 @@ export class DeviceOrientationSource implements OrientationSource {
 
   private onEvent = (e: DeviceOrientationEvent): void => {
     if (e.alpha == null || e.beta == null || e.gamma == null) return;
-    this.latestRaw = rawQuatFromDeviceOrientation(e.alpha, e.beta, e.gamma);
+    const qDevice = rawQuatFromDeviceOrientation(e.alpha, e.beta, e.gamma);
+    // Re-express the device's own-axis quaternion in HeadFrame axis labels: if qDevice
+    // maps device-local vectors into world space, and a HeadFrame-local vector v_hf
+    // corresponds to the device-local vector HEAD_FRAME_TO_DEVICE * v_hf (the inverse of
+    // the device->headframe conversion), then the HeadFrame-native quaternion is
+    // qDevice composed with HEAD_FRAME_TO_DEVICE.
+    this.latestRaw = quatCompose(qDevice, HEAD_FRAME_TO_DEVICE);
   };
 }
 

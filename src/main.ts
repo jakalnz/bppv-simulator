@@ -34,6 +34,17 @@ const canalScene = new CanalScene(canalCanvas);
 const headScene = new HeadScene(headCanvas);
 const vngTrace = new VngTrace(vngCanvas);
 
+const aboutPill = document.getElementById('about-pill') as HTMLButtonElement;
+const aboutPopover = document.getElementById('about-popover') as HTMLDivElement;
+aboutPill.addEventListener('click', () => {
+  aboutPopover.hidden = !aboutPopover.hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!aboutPopover.hidden && e.target !== aboutPill && !aboutPopover.contains(e.target as Node)) {
+    aboutPopover.hidden = true;
+  }
+});
+
 const canalStyleToggle = document.getElementById('canal-style-toggle') as HTMLButtonElement;
 canalStyleToggle.addEventListener('click', () => {
   const nextStyle = canalStyleToggle.textContent === 'Realistic' ? 'basic' : 'realistic';
@@ -104,6 +115,7 @@ const controls = new Controls(
       maneuverPlayer.pause();
       resetPhysics();
     },
+    onResetClot: () => resetPhysics(),
     onScrub: (fraction: number) => maneuverPlayer.scrubTo(fraction * maneuverPlayer.duration),
     onModeChange: (next: PlaybackMode) => {
       mode = next;

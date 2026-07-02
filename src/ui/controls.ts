@@ -21,6 +21,8 @@ export interface ControlsCallbacks {
   onPlay: () => void;
   onPause: () => void;
   onReset: () => void;
+  /** Resets only the otoconia clot / cupula / VOR physics state, leaving playback position alone -- useful in gyro/mouse-drag modes where there's no scripted maneuver position to reset. */
+  onResetClot: () => void;
   /** fraction is normalized 0..1 of the maneuver's total duration. */
   onScrub: (fraction: number) => void;
   onModeChange: (mode: PlaybackMode) => void;
@@ -93,6 +95,11 @@ export class Controls {
       callbacks.onReset();
     });
 
+    const resetClotBtn = document.createElement('button');
+    resetClotBtn.textContent = 'Reset clot';
+    resetClotBtn.title = 'Reset the otoconia clot / cupula physics without changing head position';
+    resetClotBtn.addEventListener('click', () => callbacks.onResetClot());
+
     this.scrub = document.createElement('input');
     this.scrub.type = 'range';
     this.scrub.min = '0';
@@ -131,7 +138,7 @@ export class Controls {
 
     const transportGroup = document.createElement('div');
     transportGroup.className = 'control-group';
-    transportGroup.append(this.playBtn, resetBtn, this.scrub, this.label);
+    transportGroup.append(this.playBtn, resetBtn, resetClotBtn, this.scrub, this.label);
 
     const modeGroup = document.createElement('div');
     modeGroup.className = 'control-group';

@@ -53,7 +53,11 @@ export class HeadScene {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
-    this.camera.position.set(1.6, 0.5, 1.6);
+    // Identity head orientation points anterior (nose) toward Three +X (see
+    // HEAD_FRAME_TO_THREE in sceneUtils.ts). Placing the camera on the +X axis itself
+    // (rather than offset into +Z, which gave a 3/4 angled view) means the initial,
+    // uncalibrated head pose faces the camera straight-on.
+    this.camera.position.set(1.8, 0.35, 0);
     this.camera.lookAt(0, 0, 0);
     this.scene.add(...makeAmbientAndKeyLight());
 

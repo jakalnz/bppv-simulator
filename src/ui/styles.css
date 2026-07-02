@@ -12,6 +12,7 @@ body {
 }
 
 #app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -63,6 +64,43 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.about-pill {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  background: rgba(42, 47, 56, 0.85);
+  color: #d4d9e0;
+  border: 1px solid #3a4048;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.about-pill:hover {
+  background: #343b45;
+}
+
+.about-popover {
+  position: absolute;
+  top: 46px;
+  right: 16px;
+  z-index: 10;
+  background: rgba(18, 21, 26, 0.95);
+  border: 1px solid #3a4048;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: #8b93a0;
+  max-width: 220px;
+}
+
+.about-popover a {
+  color: #8b93a0;
 }
 
 #views {
@@ -128,20 +166,6 @@ body {
   line-height: 1.5;
   color: #d4d9e0;
   pointer-events: none;
-}
-
-.canal-legend .attribution {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.62rem;
-  color: #8b93a0;
-  max-width: 180px;
-  pointer-events: auto;
-}
-
-.canal-legend .attribution a {
-  color: #8b93a0;
 }
 
 .canal-legend .swatch {
