@@ -3,6 +3,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { CanalSelector, CANAL_PLANE_NORMAL } from '../physics/canal';
 import { toThreeVector3, makeAmbientAndKeyLight, createRenderer, resizeRendererToDisplaySize } from './sceneUtils';
+import { resolveAssetUrl } from './assetPaths';
 
 const SCLERA_RADIUS = 1;
 // Flat "sticker" features (iris/pupil/spokes/tick) must sit at a z greater than the
@@ -16,8 +17,16 @@ const SPOKE_Z = SCLERA_RADIUS + 0.03;
 const PUPIL_Z = SCLERA_RADIUS + 0.05;
 const TICK_RADIAL_DISTANCE = SCLERA_RADIUS + 0.05;
 
-const REALISTIC_EYE_MTL_URL = '/models/eyeball/eyeball.mtl';
-const REALISTIC_EYE_OBJ_URL = '/models/eyeball/eyeball.obj';
+const REALISTIC_EYE_MTL_URL = resolveAssetUrl(
+  '/models/eyeball/eyeball.mtl',
+  import.meta.env.BASE_URL,
+  window.location.origin
+);
+const REALISTIC_EYE_OBJ_URL = resolveAssetUrl(
+  '/models/eyeball/eyeball.obj',
+  import.meta.env.BASE_URL,
+  window.location.origin
+);
 // Measured from the source file: the "Eye_Iris" material's faces sit at the model's max-Z
 // extent, i.e. this asset is already authored with +Z as the front/pupil-facing direction
 // -- the same convention this scene already uses (camera at +Z looking at the origin), so

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { Quat } from '../physics/types';
 import { toThreeQuaternion, makeAmbientAndKeyLight, createRenderer, resizeRendererToDisplaySize } from './sceneUtils';
+import { resolveAssetUrl } from './assetPaths';
 
 // Head local axes here (before HEAD_FRAME_TO_THREE is applied to the whole headGroup):
 // +X anterior (front-back), +Y superior (up-down), +Z is the left-right axis (HeadFrame
@@ -15,7 +16,11 @@ function onHeadSurface(x: number, y: number, z: number): THREE.Vector3 {
   return new THREE.Vector3(x * HEAD_SCALE.x, y * HEAD_SCALE.y, z * HEAD_SCALE.z);
 }
 
-const REALISTIC_HEAD_URL = '/models/head/head.obj';
+const REALISTIC_HEAD_URL = resolveAssetUrl(
+  '/models/head/head.obj',
+  import.meta.env.BASE_URL,
+  window.location.origin
+);
 /**
  * Orientation fix for this specific asset (a Blender Z-up export), determined
  * empirically by rendering the raw, untransformed model from each axis direction (OBJ

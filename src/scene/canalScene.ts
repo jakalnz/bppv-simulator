@@ -10,6 +10,7 @@ import {
   createRenderer,
   resizeRendererToDisplaySize,
 } from './sceneUtils';
+import { resolveAssetUrl } from './assetPaths';
 
 const CLOT_RADIUS_SCENE = CANAL_RADIUS_M * 0.28;
 const DUCT_TUBE_RADIUS_SCENE = CANAL_RADIUS_M * 0.22;
@@ -30,7 +31,11 @@ const REALISTIC_DUCT_MATERIAL = new THREE.MeshStandardMaterial({
   side: THREE.DoubleSide,
 });
 
-const REALISTIC_LABYRINTH_URL = '/models/inner-ear/inner-ear.obj';
+const REALISTIC_LABYRINTH_URL = resolveAssetUrl(
+  '/models/inner-ear/inner-ear.obj',
+  import.meta.env.BASE_URL,
+  window.location.origin
+);
 // Sketchfab watermark/background planes present in the source file (see docs/model
 // ideas.txt attribution) -- not anatomy, excluded by group name.
 const EXCLUDED_NODE_NAMES = new Set(['pPlane1', 'pPlane3']);
