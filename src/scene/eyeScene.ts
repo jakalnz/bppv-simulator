@@ -157,21 +157,36 @@ export class EyeScene {
     this.addTickMark();
   }
 
+  /**
+   * Full "clock face" ring of limbus tick marks, not just one -- a single mark only
+   * reads as torsional rotation once it has moved noticeably far, whereas vertical
+   * (up/down) eye position is visible immediately since it's a translation, not a
+   * rotation. Peak torsional slow-phase velocity in this sim (~30-40 deg/s, matching
+   * the ~38 deg/s median reported in Wu et al./clinical VNG literature) is comparable in
+   * magnitude to the peak vertical velocity, but a single reference point rotating that
+   * fast around the viewing axis is much less perceptually obvious than the same
+   * magnitude of vertical drift -- more reference marks around the full circumference
+   * make small/fast rotations legible at a glance, closing that perceptual gap without
+   * altering the underlying physics.
+   */
   private addTickMark(): void {
-    // "12 o'clock" limbus marker: the primary at-a-glance reference for torsional
-    // rotation. Positioned by renormalizing to a radius > SCLERA_RADIUS (rather than a
-    // fixed z offset) since it's off-center, so a fixed-z placement could still dip
-    // inside the sphere depending on its (x, y). Kept visible even with the realistic
-    // eye model, since that model has no equivalent asymmetric marking of its own.
-    const tick = new THREE.Mesh(
-      new THREE.ConeGeometry(0.09, 0.24, 4),
-      new THREE.MeshStandardMaterial({ color: 0xc0392b })
-    );
-    const tickDir = new THREE.Vector3(0, 0.98, 0.2).normalize();
-    tick.position.copy(tickDir.clone().multiplyScalar(TICK_RADIAL_DISTANCE));
-    tick.lookAt(tick.position.clone().add(tickDir));
-    tick.rotateX(Math.PI / 2);
-    this.eyeGroup.add(tick);
+    const tickCount = 12;
+    for (let i = 0; i < tickCount; i++) {
+      const isPrimary = i === 0; // "12 o'clock" -- the main torsional reference
+      const angle = (i / tickCount) * Math.PI * 2;
+      const tick = new THREE.Mesh(
+        new THREE.ConeGeometry(isPrimary ? 0.09 : 0.05, isPrimary ? 0.24 : 0.14, 4),
+        new THREE.MeshStandardMaterial({ color: isPrimary ? 0xc0392b : 0xe0a030 })
+      );
+      // Tilt the ring slightly off the pure "up" axis (matching the original single
+      // tick's 0.2 forward lean) so marks sit on the visible front hemisphere, not the
+      // occluded rim, while still tracing a full circle around the line-of-sight axis.
+      const tickDir = new THREE.Vector3(Math.sin(angle) * 0.98, Math.cos(angle) * 0.98, 0.2).normalize();
+      tick.position.copy(tickDir.clone().multiplyScalar(TICK_RADIAL_DISTANCE));
+      tick.lookAt(tick.position.clone().add(tickDir));
+      tick.rotateX(Math.PI / 2);
+      this.eyeGroup.add(tick);
+    }
   }
 
   /** Loads the realistic eyeball (real photographic iris texture) and swaps it in once ready. */
