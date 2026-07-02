@@ -78,7 +78,12 @@ export class CanalScene {
   private labyrinthWrapper: THREE.Group | null = null;
   private labyrinthBaseScale = 1;
   private style: CanalStyle = 'realistic';
-  private selector: CanalSelector = { canal: 'posterior', side: 'right' };
+  private selector: CanalSelector = {
+    canal: 'posterior',
+    side: 'right',
+    pathology: 'canalithiasis',
+    debrisOnUtricularSide: false,
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);

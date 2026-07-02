@@ -8,7 +8,12 @@ import { rollTestRight, rollTestLeft } from '../maneuvers/rollTest';
 import { Maneuver } from '../maneuvers/types';
 
 const DT = 1 / 120;
-const POSTERIOR_RIGHT: CanalSelector = { canal: 'posterior', side: 'right' };
+const POSTERIOR_RIGHT: CanalSelector = {
+  canal: 'posterior',
+  side: 'right',
+  pathology: 'canalithiasis',
+  debrisOnUtricularSide: false,
+};
 
 function runFor(
   state: CanalithState,

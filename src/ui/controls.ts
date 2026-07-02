@@ -1,16 +1,26 @@
-import { CanalType, EarSide } from '../physics/canal';
+import { CanalType, EarSide, Pathology } from '../physics/canal';
 
 export type PlaybackMode = 'maneuver' | 'gyro' | 'mouse';
-export type ManeuverKey = 'dixHallpike' | 'epley' | 'rollTest' | 'bbqRoll';
+export type ManeuverKey =
+  | 'dixHallpike'
+  | 'semontDiagnostic'
+  | 'semontLiberatory'
+  | 'epley'
+  | 'rollTest'
+  | 'bbqRoll'
+  | 'zuma';
 
 const MANEUVERS_BY_CANAL: Record<CanalType, { key: ManeuverKey; label: string }[]> = {
   posterior: [
     { key: 'dixHallpike', label: 'Dix-Hallpike' },
+    { key: 'semontDiagnostic', label: 'Semont (diagnostic)' },
+    { key: 'semontLiberatory', label: 'Semont (liberatory)' },
     { key: 'epley', label: 'Epley' },
   ],
   horizontal: [
     { key: 'rollTest', label: 'Supine roll test' },
     { key: 'bbqRoll', label: 'BBQ roll' },
+    { key: 'zuma', label: 'Zuma (apogeotropic HC cupulolithiasis)' },
   ],
 };
 
@@ -18,6 +28,8 @@ export interface ControlsCallbacks {
   onSelectCanal: (canal: CanalType) => void;
   onSelectManeuver: (key: ManeuverKey) => void;
   onSelectSide: (side: EarSide) => void;
+  onSelectPathology: (pathology: Pathology) => void;
+  onSelectDebrisSide: (onUtricularSide: boolean) => void;
   onPlay: () => void;
   onPause: () => void;
   onReset: () => void;
@@ -75,6 +87,29 @@ export class Controls {
       <option value="left">Left ear</option>
     `;
     sideSelect.addEventListener('change', () => callbacks.onSelectSide(sideSelect.value as EarSide));
+
+    const pathologySelect = document.createElement('select');
+    pathologySelect.innerHTML = `
+      <option value="canalithiasis">Canalithiasis</option>
+      <option value="cupulolithiasis">Cupulolithiasis</option>
+    `;
+
+    const debrisSideSelect = document.createElement('select');
+    debrisSideSelect.innerHTML = `
+      <option value="canal">Debris: canal-side</option>
+      <option value="utricular">Debris: utricular-side</option>
+    `;
+    // Only meaningful for cupulolithiasis -- see CanalSelector.debrisOnUtricularSide.
+    debrisSideSelect.style.display = 'none';
+    debrisSideSelect.addEventListener('change', () =>
+      callbacks.onSelectDebrisSide(debrisSideSelect.value === 'utricular')
+    );
+
+    pathologySelect.addEventListener('change', () => {
+      const pathology = pathologySelect.value as Pathology;
+      debrisSideSelect.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
+      callbacks.onSelectPathology(pathology);
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.textContent = 'Play';
@@ -144,7 +179,16 @@ export class Controls {
     modeGroup.className = 'control-group';
     modeGroup.append(modeSelect, this.gyroEnableBtn, this.gyroCalibrateBtn, this.gyroStatus);
 
-    container.append(sideSelect, canalSelect, this.maneuverSelect, transportGroup, modeGroup, this.debug);
+    container.append(
+      sideSelect,
+      canalSelect,
+      pathologySelect,
+      debrisSideSelect,
+      this.maneuverSelect,
+      transportGroup,
+      modeGroup,
+      this.debug
+    );
   }
 
   setProgress(fraction: number, label: string): void {

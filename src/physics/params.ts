@@ -63,3 +63,14 @@ export const QUICK_PHASE_THRESHOLD = 0.35;
 
 /** Amount (radians) the quick phase resets the eye back toward center. */
 export const QUICK_PHASE_RESET_AMOUNT = 0.3;
+
+/**
+ * Converts the gravity component along the canal's tangent AT THE CUPULA (s=0) into a
+ * cupulolithiasis drive, fed into the same updateCupula() used by canalithiasis (see
+ * cupulolithiasis.ts). Tuned so the steady-state deflection this produces in a typical
+ * provoking pose (beta_ss = KAPPA_FLOW * TAU_CUPULA * CUPULA_GRAVITY_GAIN * gravity
+ * component) lands in roughly the same range as canalithiasis's peak paroxysm deflection
+ * (see GAIN_VOR's comment, beta ~1-2.5), so the two pathologies produce comparably-sized
+ * nystagmus and only differ in onset/decay shape, not overall magnitude.
+ */
+export const CUPULA_GRAVITY_GAIN = 0.08;

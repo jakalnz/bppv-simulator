@@ -2,15 +2,18 @@ import { Quat, quatInvert, rotateVec } from './physics/types';
 import { G_WORLD, LATENCY_SECONDS } from './physics/params';
 import { CanalithState, initialCanalithState, updateCanalith, isCleared } from './physics/canalith';
 import { updateCupula, relaxOnly } from './physics/cupula';
+import { cupulolithiasisDrive } from './physics/cupulolithiasis';
 import { updateVor, initialVorState, VorState, decomposeEyeMovement } from './physics/vor';
-import { CanalSelector, CanalType, S_COMMON_CRUS } from './physics/canal';
+import { CanalSelector, CanalType, Pathology, S_COMMON_CRUS } from './physics/canal';
 
 import { Maneuver } from './maneuvers/types';
 import { ManeuverPlayer } from './maneuvers/playback';
 import { dixHallpikeRight, dixHallpikeLeft } from './maneuvers/dixHallpike';
+import { semontDiagnosticRight, semontDiagnosticLeft, semontLiberatoryRight, semontLiberatoryLeft } from './maneuvers/semont';
 import { epleyRight, epleyLeft } from './maneuvers/epley';
 import { rollTestRight, rollTestLeft } from './maneuvers/rollTest';
 import { bbqRollRight, bbqRollLeft } from './maneuvers/bbqRoll';
+import { zumaRight, zumaLeft } from './maneuvers/zuma';
 
 import { OrientationSource } from './sensors/orientationSource';
 import { DeviceOrientationSource, requestOrientationPermission } from './sensors/deviceOrientation';
@@ -60,18 +63,29 @@ const gyroSource = new DeviceOrientationSource();
 // show gravity moving the otoconia clot to a new low point, with no dropdown-hunting
 // required first.
 let mode: PlaybackMode = 'mouse';
-let selector: CanalSelector = { canal: 'posterior', side: 'right' };
+let selector: CanalSelector = {
+  canal: 'posterior',
+  side: 'right',
+  pathology: 'canalithiasis',
+  debrisOnUtricularSide: false,
+};
 let maneuverKey: ManeuverKey = 'dixHallpike';
 
 function getManeuver(key: ManeuverKey, forSelector: CanalSelector): Maneuver {
   const right = forSelector.side === 'right';
   switch (key) {
+    case 'semontDiagnostic':
+      return right ? semontDiagnosticRight : semontDiagnosticLeft;
+    case 'semontLiberatory':
+      return right ? semontLiberatoryRight : semontLiberatoryLeft;
     case 'epley':
       return right ? epleyRight : epleyLeft;
     case 'rollTest':
       return right ? rollTestRight : rollTestLeft;
     case 'bbqRoll':
       return right ? bbqRollRight : bbqRollLeft;
+    case 'zuma':
+      return right ? zumaRight : zumaLeft;
     case 'dixHallpike':
     default:
       return right ? dixHallpikeRight : dixHallpikeLeft;
@@ -85,6 +99,7 @@ function activeOrientationSource(): OrientationSource {
 }
 
 const legendCommonCrus = document.getElementById('legend-common-crus') as HTMLDivElement;
+const legendClotLabel = document.getElementById('legend-clot-label') as HTMLSpanElement;
 const canalPanelTitle = document.getElementById('canal-panel-title') as HTMLSpanElement;
 const CANAL_PANEL_TITLES: Record<CanalType, string> = {
   posterior: 'Posterior canal',
@@ -99,6 +114,11 @@ function applyCanalChange(): void {
   // horizontal canal's non-ampullary end opens directly into the utricle, so the
   // landmark (and its legend entry) is anatomically meaningless for it.
   legendCommonCrus.style.display = selector.canal === 'posterior' ? '' : 'none';
+  // Cupulolithiasis debris is fixed to the cupula (not a free-floating clot along the
+  // duct) -- relabel the legend to match what's actually shown (see renderFrame's
+  // clot-position pinning below).
+  legendClotLabel.textContent =
+    selector.pathology === 'cupulolithiasis' ? 'Debris (fixed to cupula)' : 'Otoconia clot';
   // eyeScene no longer needs a per-canal rotation axis -- it renders the same
   // horizontal/vertical/torsional decomposition (already canal-dependent via
   // decomposeEyeMovement below) that drives the VNG trace, computed fresh each frame.
@@ -120,6 +140,14 @@ const controls = new Controls(
     },
     onSelectSide: (next) => {
       selector = { ...selector, side: next };
+      applyCanalChange();
+    },
+    onSelectPathology: (next: Pathology) => {
+      selector = { ...selector, pathology: next };
+      applyCanalChange();
+    },
+    onSelectDebrisSide: (onUtricularSide: boolean) => {
+      selector = { ...selector, debrisOnUtricularSide: onUtricularSide };
       applyCanalChange();
     },
     onPlay: () => maneuverPlayer.play(),
@@ -178,13 +206,19 @@ function stepPhysicsOnce(dt: number): void {
 
   const gHead = rotateVec(quatInvert(qHead), G_WORLD);
 
-  canalithState = updateCanalith(canalithState, gHead, dt, selector);
-  const cleared = isCleared(canalithState.s);
-
-  // The cupula is driven by the clot's ACTUAL (latency-gated, lagged) velocity, not the
-  // instantaneous target -- so during the latency period, before the clot is released,
-  // there is correctly no endolymph flow and no nystagmus either.
-  beta = cleared ? relaxOnly(beta, dt) : updateCupula(beta, canalithState.dsdt, dt);
+  if (selector.pathology === 'canalithiasis') {
+    canalithState = updateCanalith(canalithState, gHead, dt, selector);
+    const cleared = isCleared(canalithState.s);
+    // The cupula is driven by the clot's ACTUAL (latency-gated, lagged) velocity, not
+    // the instantaneous target -- so during the latency period, before the clot is
+    // released, there is correctly no endolymph flow and no nystagmus either.
+    beta = cleared ? relaxOnly(beta, dt) : updateCupula(beta, canalithState.dsdt, dt);
+  } else {
+    // Cupulolithiasis: debris is fixed to the cupula, not free-floating -- no position,
+    // no latency gate, no clot-inertia lag. canalithState is simply left untouched (its
+    // stale s/dsdt/latency values are never read while in this mode).
+    beta = updateCupula(beta, cupulolithiasisDrive(gHead, selector), dt);
+  }
   vor = updateVor(vor, beta, dt, selector.canal);
 
   simulationTimeSeconds += dt;
@@ -215,7 +249,9 @@ setInterval(() => {
 
 function renderFrame(): void {
   eyeScene.setEyeAngle(decomposeEyeMovement(vor.eyeAngle, selector));
-  canalScene.setClotArcPosition(canalithState.s);
+  // Cupulolithiasis debris never moves along the duct -- pin the rendered marker at the
+  // cupula (s=0) rather than showing the last (stale, unmoving) canalithiasis s value.
+  canalScene.setClotArcPosition(selector.pathology === 'cupulolithiasis' ? 0 : canalithState.s);
   canalScene.setCupulaDeflection(beta);
   canalScene.setOrientation(lastQHead);
   headScene.setOrientation(lastQHead);
@@ -228,18 +264,21 @@ function renderFrame(): void {
   const fraction = maneuverPlayer.duration > 0 ? maneuverPlayer.elapsedSeconds / maneuverPlayer.duration : 0;
   controls.setProgress(fraction, maneuverPlayer.currentLabel);
   controls.setPlayingLabel(maneuverPlayer.isPlaying);
-  const latencyStatus = canalithState.released
-    ? 'released'
-    : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`;
   const eyeComponentsDebug = decomposeEyeMovement(vor.eyeAngle, selector);
+  const pathologyStatus =
+    selector.pathology === 'canalithiasis'
+      ? `s=${canalithState.s.toFixed(3)} rad  ds/dt=${canalithState.dsdt.toFixed(3)}  (${
+          canalithState.released ? 'released' : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`
+        })  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})`
+      : `cupulolithiasis: gravity-driven, no latency, debris ${
+          selector.debrisOnUtricularSide ? 'utricular-side' : 'canal-side'
+        }`;
   controls.setDebugReadout(
-    `s=${canalithState.s.toFixed(3)} rad  ds/dt=${canalithState.dsdt.toFixed(3)}  (${latencyStatus})  beta=${beta.toFixed(
+    `${pathologyStatus}  beta=${beta.toFixed(3)}  eye=${vor.eyeAngle.toFixed(
       3
-    )}  eye=${vor.eyeAngle.toFixed(3)} rad  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})\nH=${eyeComponentsDebug.horizontalDeg.toFixed(
+    )} rad\nH=${eyeComponentsDebug.horizontalDeg.toFixed(2)} V=${eyeComponentsDebug.verticalDeg.toFixed(
       2
-    )} V=${eyeComponentsDebug.verticalDeg.toFixed(2)} T=${eyeComponentsDebug.torsionalDeg.toFixed(
-      2
-    )}  selector=${selector.canal}/${selector.side}`
+    )} T=${eyeComponentsDebug.torsionalDeg.toFixed(2)}  selector=${selector.canal}/${selector.side}/${selector.pathology}`
   );
 
   requestAnimationFrame(renderFrame);

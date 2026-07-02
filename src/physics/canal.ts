@@ -3,10 +3,28 @@ import { Vec3, v3, normalize, cross, scale, add, dot } from './types';
 export type CanalType = 'posterior' | 'horizontal';
 export type EarSide = 'left' | 'right';
 
-/** Identifies one specific canal: which type, in which ear. */
+/**
+ * Canalithiasis: free-floating otoconia debris in the duct (see physics/canalith.ts).
+ * Cupulolithiasis: debris adherent directly to the cupula itself (see
+ * physics/cupulolithiasis.ts) -- clinically distinguished by minimal latency and
+ * non-fatiguing nystagmus while a provoking position is held, unlike canalithiasis's
+ * latency-gated, self-resolving paroxysm.
+ */
+export type Pathology = 'canalithiasis' | 'cupulolithiasis';
+
+/** Identifies one specific canal: which type, in which ear, with which pathology. */
 export interface CanalSelector {
   canal: CanalType;
   side: EarSide;
+  pathology: Pathology;
+  /**
+   * Only meaningful when pathology === 'cupulolithiasis'. Which side of the cupula the
+   * debris is adherent to -- determines geotropic vs apogeotropic direction, most
+   * clinically relevant for the horizontal canal (see maneuvers/zuma.ts). This is a
+   * single sign flip, not a full attachment-geometry model -- see cupulolithiasis.ts for
+   * the flagged simplification.
+   */
+  debrisOnUtricularSide: boolean;
 }
 
 function mirrorAcrossSagittal(n: Vec3): Vec3 {
