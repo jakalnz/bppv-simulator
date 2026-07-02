@@ -165,6 +165,10 @@ export class CanalScene {
     this.crusMarker.position.copy(toThreeVector3(canalPosition(S_COMMON_CRUS, this.selector)));
     const crusTangent = toThreeVector3(canalTangent(S_COMMON_CRUS, this.selector)).normalize();
     this.crusMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), crusTangent);
+    // The crus commune is formed only where the anterior and posterior canals join --
+    // the horizontal canal's non-ampullary end opens directly into the utricle on its
+    // own, so this landmark is anatomically meaningless for it and should not be shown.
+    this.crusMarker.visible = this.selector.canal === 'posterior';
   }
 
   /** Switches which canal/ear is shown (called when the canal-type or affected-ear selector changes). */

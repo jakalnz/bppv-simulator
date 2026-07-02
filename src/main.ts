@@ -84,9 +84,21 @@ function activeOrientationSource(): OrientationSource {
   return maneuverPlayer;
 }
 
+const legendCommonCrus = document.getElementById('legend-common-crus') as HTMLDivElement;
+const canalPanelTitle = document.getElementById('canal-panel-title') as HTMLSpanElement;
+const CANAL_PANEL_TITLES: Record<CanalType, string> = {
+  posterior: 'Posterior canal',
+  horizontal: 'Horizontal canal',
+};
+
 function applyCanalChange(): void {
   maneuverPlayer.setManeuver(getManeuver(maneuverKey, selector));
   canalScene.setCanal(selector);
+  canalPanelTitle.textContent = CANAL_PANEL_TITLES[selector.canal];
+  // The crus commune only exists where the anterior and posterior canals join -- the
+  // horizontal canal's non-ampullary end opens directly into the utricle, so the
+  // landmark (and its legend entry) is anatomically meaningless for it.
+  legendCommonCrus.style.display = selector.canal === 'posterior' ? '' : 'none';
   // eyeScene no longer needs a per-canal rotation axis -- it renders the same
   // horizontal/vertical/torsional decomposition (already canal-dependent via
   // decomposeEyeMovement below) that drives the VNG trace, computed fresh each frame.
@@ -219,10 +231,15 @@ function renderFrame(): void {
   const latencyStatus = canalithState.released
     ? 'released'
     : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`;
+  const eyeComponentsDebug = decomposeEyeMovement(vor.eyeAngle, selector);
   controls.setDebugReadout(
     `s=${canalithState.s.toFixed(3)} rad  ds/dt=${canalithState.dsdt.toFixed(3)}  (${latencyStatus})  beta=${beta.toFixed(
       3
-    )}  eye=${vor.eyeAngle.toFixed(3)} rad  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})`
+    )}  eye=${vor.eyeAngle.toFixed(3)} rad  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})\nH=${eyeComponentsDebug.horizontalDeg.toFixed(
+      2
+    )} V=${eyeComponentsDebug.verticalDeg.toFixed(2)} T=${eyeComponentsDebug.torsionalDeg.toFixed(
+      2
+    )}  selector=${selector.canal}/${selector.side}`
   );
 
   requestAnimationFrame(renderFrame);
