@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>BPPV Simulator</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="vng-panel">
+        <div class="vng-header">
+          <h2>VNG trace (10s window)</h2>
+          <div class="vng-legend">
+            <span><span class="swatch" style="background:#e2534a"></span>Horizontal</span>
+            <span><span class="swatch" style="background:#4caf6b"></span>Vertical</span>
+            <span><span class="swatch" style="background:#4a90d9"></span>Torsional</span>
+          </div>
+        </div>
+        <canvas id="vng-canvas"></canvas>
+      </div>
+      <div id="views">
+        <div class="view-panel">
+          <h2>Eye (nystagmus)</h2>
+          <canvas id="eye-canvas"></canvas>
+        </div>
+        <div class="view-panel">
+          <h2>
+            Posterior canal (cutaway)
+            <button id="canal-style-toggle" class="inline-toggle" type="button">Realistic</button>
+          </h2>
+          <canvas id="canal-canvas"></canvas>
+          <div class="canal-legend">
+            <div><span class="swatch" style="background:#d7c9c9"></span>Duct</div>
+            <div><span class="swatch" style="background:#c9a227"></span>Otoconia clot</div>
+            <div><span class="swatch" style="background:#2ec4c6"></span>Cupula (ampulla, s=0)</div>
+            <div><span class="swatch" style="background:#e08a2e"></span>Common crus</div>
+            <div><span class="swatch" style="background:#ffd54a"></span>Gravity (fixed)</div>
+            <div class="attribution">
+              "Anatomy of the Inner Ear" by University of Dundee School of Medicine,
+              <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>
+            </div>
+          </div>
+        </div>
+        <div class="view-panel">
+          <h2>Head position</h2>
+          <canvas id="head-canvas"></canvas>
+        </div>
+      </div>
+      <div id="controls"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

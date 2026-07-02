@@ -1,0 +1,98 @@
+import { Vec3, dot } from './types';
+import { canalTangent, CanalSelector, S_MAX, S_COMMON_CRUS } from './canal';
+import { K_MOBILITY, LATENCY_SECONDS, CLOT_INERTIA_TAU, DRIVE_EPSILON } from './params';
+
+export interface CanalithState {
+  /** Arc position (radians) along the canal duct. */
+  s: number;
+  /** Current (lagged, latency-gated) velocity, ds/dt. */
+  dsdt: number;
+  /** Seconds of sustained drive in the current direction since the last reset. */
+  latencyTimer: number;
+  /** Whether the latency period has elapsed and the clot is free to move. */
+  released: boolean;
+  /** Direction (-1, 0, +1) of the most recent sustained drive. */
+  lastTargetSign: number;
+}
+
+export function initialCanalithState(): CanalithState {
+  return { s: 0, dsdt: 0, latencyTimer: 0, released: false, lastTargetSign: 0 };
+}
+
+/**
+ * Instantaneous overdamped target velocity at arc position s, given gravity in
+ * HeadFrame: proportional to the tangential component of gravity (Stokes drag
+ * dominates at this scale, inertia of the particle itself is negligible). This is NOT
+ * what the clot actually does frame-to-frame -- see updateCanalith for why.
+ */
+function targetVelocity(s: number, gHead: Vec3, selector: CanalSelector): number {
+  return K_MOBILITY * dot(gHead, canalTangent(s, selector));
+}
+
+/**
+ * Advances the canalith clot one timestep, reproducing the clinically observed
+ * latency-then-paroxysm pattern of posterior canalithiasis rather than the clot simply
+ * snapping instantly to wherever gravity currently points:
+ *
+ * 1. Latency/breakaway gating -- the clot does not move at all until a consistent
+ *    driving direction has been sustained for LATENCY_SECONDS (see params.ts).
+ * 2. Once released, velocity approaches the instantaneous overdamped target through a
+ *    short first-order lag (CLOT_INERTIA_TAU) instead of jumping to it immediately,
+ *    giving a visible ramp-up ("accelerating, pushing the fluid") followed by a natural
+ *    ramp-down as the target itself shrinks approaching the new resting point
+ *    ("settling").
+ *
+ * A reversal in driving direction (e.g. sitting back up from a Dix-Hallpike hold)
+ * restarts the latency countdown, matching the fact that the reversed nystagmus burst
+ * on returning upright also has its own onset latency.
+ */
+export function updateCanalith(
+  state: CanalithState,
+  gHead: Vec3,
+  dt: number,
+  selector: CanalSelector
+): CanalithState {
+  const target = targetVelocity(state.s, gHead, selector);
+  const targetSign = Math.abs(target) < DRIVE_EPSILON ? 0 : Math.sign(target);
+
+  let { latencyTimer, released, lastTargetSign } = state;
+
+  if (targetSign === 0) {
+    latencyTimer = 0;
+    released = false;
+    lastTargetSign = 0;
+  } else if (targetSign !== lastTargetSign) {
+    latencyTimer = 0;
+    released = false;
+    lastTargetSign = targetSign;
+  } else {
+    latencyTimer += dt;
+    if (latencyTimer >= LATENCY_SECONDS) released = true;
+  }
+
+  const effectiveTarget = released ? target : 0;
+  const laggedVelocity = state.dsdt + (effectiveTarget - state.dsdt) * Math.min(1, dt / CLOT_INERTIA_TAU);
+
+  let s = state.s + laggedVelocity * dt;
+  // The clot can't move past the ampulla (s=0) or the far end of the duct (S_MAX) --
+  // once jammed against either wall, it is genuinely not moving, so the reported/stored
+  // velocity must clamp to 0 too. Otherwise the cupula (driven by this velocity, see
+  // main.ts) would keep being driven by a "phantom" flow from a clot that isn't
+  // actually going anywhere, and a later direction reversal would have to first unwind
+  // that fictitious velocity before responding.
+  let dsdt = laggedVelocity;
+  if (s <= 0 && laggedVelocity < 0) {
+    s = 0;
+    dsdt = 0;
+  } else if (s >= S_MAX && laggedVelocity > 0) {
+    s = S_MAX;
+    dsdt = 0;
+  }
+
+  return { s, dsdt, latencyTimer, released, lastTargetSign };
+}
+
+/** True once the clot has passed the common crus (cleared into the utricle, e.g. after Epley). */
+export function isCleared(s: number): boolean {
+  return s >= S_COMMON_CRUS;
+}
