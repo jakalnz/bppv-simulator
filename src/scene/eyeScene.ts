@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
-import { CanalSelector, CANAL_PLANE_NORMAL } from '../physics/canal';
-import { toThreeVector3, makeAmbientAndKeyLight, createRenderer, resizeRendererToDisplaySize } from './sceneUtils';
+import { EyeMovementComponents } from '../physics/vor';
+import { DEG2RAD } from '../physics/types';
+import { makeAmbientAndKeyLight, createRenderer, resizeRendererToDisplaySize } from './sceneUtils';
 import { resolveAssetUrl } from './assetPaths';
 
 const SCLERA_RADIUS = 1;
@@ -90,12 +91,25 @@ function createScleraTexture(): THREE.CanvasTexture {
 
 /**
  * Renders a single eyeball whose rotation visualizes the VOR-driven nystagmus.
- * The rotation axis is the PSC plane normal itself (converted to Three.js space) --
- * its torsional-vs-vertical visual mix is not hard-coded, it falls out of that axis.
- * Starts with a procedural eyeball (radial iris spokes + tick mark, needed because a
- * plain solid-colored iris/pupil rotated about its own center looks identical at any
- * angle) and swaps in a realistic model with a real photographic iris once it loads,
- * falling back to the procedural one if loading fails.
+ *
+ * Rather than rotating the eyeball about the canal's own (tilted) plane normal
+ * directly, this decomposes the movement into the same torsional/vertical/horizontal
+ * components the VNG trace already reads off (see decomposeEyeMovement in physics/vor.ts)
+ * and applies them as three separate, ordered rotations: torsion always spins the eye
+ * about the camera-facing line-of-sight axis (through the pupil), independent of gaze
+ * direction, then the gaze deflection (vertical/horizontal) points that already-torsed
+ * eye up/down/left/right. A single combined rotation about the tilted canal-normal axis
+ * is physically literal but reads on screen as an ambiguous wobble/tumble (the camera's
+ * fixed frontal view can't distinguish "spinning about a tilted axis" from "nodding" at
+ * a glance) -- decoupling torsion onto its own fixed screen-facing axis keeps it legible
+ * as a clean clockwise/counterclockwise spin no matter how much vertical/horizontal
+ * component is mixed in, matching how clinicians actually read torsional nystagmus (as
+ * rotation of the iris pattern around the pupil, not tilt of the whole eye).
+ *
+ * Starts with a procedural eyeball (radial iris spokes + a full ring of limbus ticks,
+ * needed because a plain solid-colored iris/pupil rotated about its own center looks
+ * identical at any angle) and swaps in a realistic model with a real photographic iris
+ * once it loads, falling back to the procedural one if loading fails.
  */
 export class EyeScene {
   readonly scene = new THREE.Scene();
@@ -103,15 +117,12 @@ export class EyeScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly eyeGroup = new THREE.Group();
   private readonly proceduralParts = new THREE.Group();
-  private rotationAxis: THREE.Vector3;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
     this.camera.position.set(0, 0, 5);
     this.camera.lookAt(0, 0, 0);
     this.scene.add(...makeAmbientAndKeyLight());
-
-    this.rotationAxis = toThreeVector3(CANAL_PLANE_NORMAL.posterior.right).normalize();
 
     this.buildProceduralEye();
     this.eyeGroup.add(this.proceduralParts);
@@ -213,13 +224,42 @@ export class EyeScene {
     }
   }
 
-  /** Switches which canal's plane the eye rotates about (called when the canal/ear selectors change). */
-  setCanal(selector: CanalSelector): void {
-    this.rotationAxis = toThreeVector3(CANAL_PLANE_NORMAL[selector.canal][selector.side]).normalize();
-  }
-
-  setEyeAngle(angleRad: number): void {
-    this.eyeGroup.quaternion.setFromAxisAngle(this.rotationAxis, angleRad);
+  /**
+   * Applies the decomposed eye movement as three separate, ordered rotations rather
+   * than one combined rotation about a tilted 3D axis (see the class doc comment for
+   * why). Composition order: torsion is applied first, about the camera-facing Z axis
+   * (the eye's own line-of-sight / pupil axis when looking straight at the viewer) --
+   * this is deliberately independent of gaze direction, so it always reads as a clean
+   * spin regardless of how much vertical/horizontal deviation is mixed in. The gaze
+   * rotations (vertical about screen-X, horizontal about screen-Y) are applied second,
+   * pointing the already-torsed eye. Camera pitch/yaw/roll axis conventions (pitch about
+   * X, yaw about Y, roll about the view axis Z) are the natural mapping here since the
+   * camera looks straight down -Z at the eye.
+   *
+   * Sign of the vertical rotation is negated so that, matching decomposeEyeMovement's
+   * "positive = up" convention, a positive verticalDeg moves the pupil up on screen (a
+   * positive rotation about +X by the right-hand rule moves +Z toward +Y i.e. DOWN, so
+   * the sign has to flip to get "up"). Horizontal's screen-direction sign is not
+   * independently verified beyond "some consistent left/right deflection" -- unlike
+   * vertical (checked against the textbook "upbeating" Dix-Hallpike description) there's
+   * no equivalent simple clinical landmark for horizontal-canal gaze direction sign in
+   * this view, so it's a labeling choice, flagged rather than assumed correct.
+   */
+  setEyeAngle({ horizontalDeg, verticalDeg, torsionalDeg }: EyeMovementComponents): void {
+    const torsionQuat = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1),
+      torsionalDeg * DEG2RAD
+    );
+    const verticalQuat = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      -verticalDeg * DEG2RAD
+    );
+    const horizontalQuat = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      horizontalDeg * DEG2RAD
+    );
+    const gazeQuat = horizontalQuat.multiply(verticalQuat);
+    this.eyeGroup.quaternion.copy(gazeQuat.multiply(torsionQuat));
   }
 
   render(): void {

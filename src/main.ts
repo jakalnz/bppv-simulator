@@ -87,7 +87,9 @@ function activeOrientationSource(): OrientationSource {
 function applyCanalChange(): void {
   maneuverPlayer.setManeuver(getManeuver(maneuverKey, selector));
   canalScene.setCanal(selector);
-  eyeScene.setCanal(selector);
+  // eyeScene no longer needs a per-canal rotation axis -- it renders the same
+  // horizontal/vertical/torsional decomposition (already canal-dependent via
+  // decomposeEyeMovement below) that drives the VNG trace, computed fresh each frame.
   resetPhysics();
 }
 
@@ -200,7 +202,7 @@ setInterval(() => {
 }, 1000 / 120);
 
 function renderFrame(): void {
-  eyeScene.setEyeAngle(vor.eyeAngle);
+  eyeScene.setEyeAngle(decomposeEyeMovement(vor.eyeAngle, selector));
   canalScene.setClotArcPosition(canalithState.s);
   canalScene.setCupulaDeflection(beta);
   canalScene.setOrientation(lastQHead);
