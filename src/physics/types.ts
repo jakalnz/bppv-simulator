@@ -71,5 +71,15 @@ export function rotateVec(q: Quat, v: Vec3): Vec3 {
   return out;
 }
 
+/**
+ * Angular distance (radians, always >= 0) between two orientations. Wraps gl-matrix's
+ * own quat.getAngle rather than hand-deriving it from quaternion components -- this
+ * project has repeatedly gotten hand-derived 3D rotation math wrong (head orientation,
+ * canal handedness), so reuse the library's implementation wherever one exists.
+ */
+export function quatAngleBetween(a: Quat, b: Quat): number {
+  return quat.getAngle(a, b);
+}
+
 export const DEG2RAD = Math.PI / 180;
 export const RAD2DEG = 180 / Math.PI;

@@ -33,10 +33,17 @@ export function buildDixHallpike(side: EarSide): Maneuver {
     waypoints: [
       { t: 0, quat: upright, label: 'Seated upright' },
       { t: 2, quat: turned45, label: `Head turned 45° ${side}` },
-      { t: 3, quat: supineHeadHanging, label: 'Reclined to supine, head hanging' },
-      { t: 33, quat: supineHeadHanging, label: 'Hold (observe nystagmus)' },
-      { t: 35, quat: turned45, label: 'Sit back up' },
-      { t: 36, quat: upright, label: 'Seated upright' },
+      // Deliberately a controlled, gentle 2s recline (not a rapid one) -- unlike
+      // Semont/Zuma, Dix-Hallpike's provocation mechanism is sustained gravity on
+      // free-floating debris, not a mechanical release triggered by rapid deceleration
+      // (see physics/cupulaRelease.ts). Verified numerically: this keeps Dix-Hallpike's
+      // peak angular speed well below the release threshold, unlike an earlier 1s
+      // version of this same transition, which reached a comparable speed to Semont's
+      // actually-rapid transitions and would have false-triggered a release.
+      { t: 4, quat: supineHeadHanging, label: 'Reclined to supine, head hanging' },
+      { t: 34, quat: supineHeadHanging, label: 'Hold (observe nystagmus)' },
+      { t: 36, quat: turned45, label: 'Sit back up' },
+      { t: 37, quat: upright, label: 'Seated upright' },
     ],
   };
 }

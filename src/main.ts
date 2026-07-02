@@ -1,8 +1,9 @@
-import { Quat, quatInvert, rotateVec } from './physics/types';
+import { Quat, quatAngleBetween, quatInvert, rotateVec } from './physics/types';
 import { G_WORLD, LATENCY_SECONDS } from './physics/params';
 import { CanalithState, initialCanalithState, updateCanalith, isCleared } from './physics/canalith';
 import { updateCupula, relaxOnly } from './physics/cupula';
 import { cupulolithiasisDrive } from './physics/cupulolithiasis';
+import { CupulaReleaseDetector, initialReleaseDetector, updateReleaseDetector } from './physics/cupulaRelease';
 import { updateVor, initialVorState, VorState, decomposeEyeMovement } from './physics/vor';
 import { CanalSelector, CanalType, Pathology, S_COMMON_CRUS } from './physics/canal';
 
@@ -20,7 +21,7 @@ import { DeviceOrientationSource, requestOrientationPermission } from './sensors
 import { MouseDragSource } from './sensors/mouseDragSource';
 
 import { EyeScene } from './scene/eyeScene';
-import { CanalScene } from './scene/canalScene';
+import { CanalScene, CanalStyle } from './scene/canalScene';
 import { HeadScene } from './scene/headScene';
 
 import { Controls, ManeuverKey, PlaybackMode } from './ui/controls';
@@ -48,11 +49,9 @@ document.addEventListener('click', (e) => {
   }
 });
 
-const canalStyleToggle = document.getElementById('canal-style-toggle') as HTMLButtonElement;
-canalStyleToggle.addEventListener('click', () => {
-  const nextStyle = canalStyleToggle.textContent === 'Realistic' ? 'basic' : 'realistic';
-  canalScene.setStyle(nextStyle);
-  canalStyleToggle.textContent = nextStyle === 'realistic' ? 'Realistic' : 'Basic';
+const canalStyleSelect = document.getElementById('canal-style-select') as HTMLSelectElement;
+canalStyleSelect.addEventListener('change', () => {
+  canalScene.setStyle(canalStyleSelect.value as CanalStyle);
 });
 
 const maneuverPlayer = new ManeuverPlayer(dixHallpikeRight);
@@ -114,11 +113,6 @@ function applyCanalChange(): void {
   // horizontal canal's non-ampullary end opens directly into the utricle, so the
   // landmark (and its legend entry) is anatomically meaningless for it.
   legendCommonCrus.style.display = selector.canal === 'posterior' ? '' : 'none';
-  // Cupulolithiasis debris is fixed to the cupula (not a free-floating clot along the
-  // duct) -- relabel the legend to match what's actually shown (see renderFrame's
-  // clot-position pinning below).
-  legendClotLabel.textContent =
-    selector.pathology === 'cupulolithiasis' ? 'Debris (fixed to cupula)' : 'Otoconia clot';
   // eyeScene no longer needs a per-canal rotation axis -- it renders the same
   // horizontal/vertical/torsional decomposition (already canal-dependent via
   // decomposeEyeMovement below) that drives the VNG trace, computed fresh each frame.
@@ -187,12 +181,28 @@ let beta = 0; // cupula deflection
 let vor: VorState = initialVorState();
 let lastQHead: Quat = maneuverPlayer.currentOrientation();
 let simulationTimeSeconds = 0;
+// Angular-velocity tracking for the cupula-release mechanic (see physics/cupulaRelease.ts):
+// a rapid head movement followed by an abrupt stop mechanically knocks cupula-adherent
+// debris loose, converting cupulolithiasis into free-floating canalithiasis for the rest
+// of the session. Applies regardless of orientation source (scripted maneuver, mouse-drag,
+// or gyro) and regardless of which canal-view style is displayed.
+let prevQHeadForVelocity: Quat = lastQHead;
+let releaseDetector: CupulaReleaseDetector = initialReleaseDetector();
+let cupulaDebrisReleased = false;
 
 function resetPhysics(): void {
   canalithState = initialCanalithState();
   beta = 0;
   vor = initialVorState();
   simulationTimeSeconds = 0;
+  // Must match whatever qHead the VERY NEXT stepPhysicsOnce will compute, not the stale
+  // lastQHead from before this reset -- resetPhysics() is often called right after
+  // switching maneuvers (which snaps ManeuverPlayer back to its first waypoint), and
+  // using the old orientation here would create a one-frame "phantom" jump large enough
+  // to false-trigger a cupula release the instant the new maneuver starts.
+  prevQHeadForVelocity = activeOrientationSource().currentOrientation() ?? maneuverPlayer.currentOrientation();
+  releaseDetector = initialReleaseDetector();
+  cupulaDebrisReleased = false;
   vngTrace.reset();
 }
 
@@ -206,18 +216,52 @@ function stepPhysicsOnce(dt: number): void {
 
   const gHead = rotateVec(quatInvert(qHead), G_WORLD);
 
-  if (selector.pathology === 'canalithiasis') {
+  // Angular speed since last tick, and whether that constitutes a rapid-movement-then-
+  // stop event -- see physics/cupulaRelease.ts for why this is a hysteresis crossing
+  // detector rather than a raw instantaneous-deceleration check.
+  //
+  // Only evaluated in scripted-maneuver mode: MouseDragSource/DeviceOrientationSource
+  // apply raw input-event deltas to orientation immediately, with no per-frame
+  // smoothing, so a burst of pointermove events landing within one physics tick can
+  // jump the orientation multiple times before the next sample -- an artifact of
+  // event-driven input timing, not a real rapid head movement (confirmed via manual
+  // testing: a fast synthetic drag produced an artificially huge single-tick angular
+  // speed and false-triggered release). The scripted maneuvers' waypoint timings, by
+  // contrast, were deliberately built and numerically verified for this purpose (see
+  // physics/cupulaRelease.test.ts) -- their speed readings are trustworthy.
+  const angularSpeed = quatAngleBetween(prevQHeadForVelocity, qHead) / dt;
+  prevQHeadForVelocity = qHead;
+  let released = false;
+  if (mode === 'maneuver') {
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed);
+  }
+  if (selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased && released) {
+    cupulaDebrisReleased = true;
+    // Debris starts its free-floating life at the ampulla (s=0), same convention as
+    // ordinary canalithiasis -- beta itself is left untouched, so there's no visual or
+    // eye-movement discontinuity at the moment of release, only a change in which
+    // mechanism drives beta from here on. Reusing initialCanalithState() means the
+    // freshly-released debris is still subject to canalithiasis's own LATENCY_SECONDS
+    // gate before it starts moving -- not literally re-adhering, but a reasonable stand-in
+    // for a brief settling period before organized flow begins, consistent with reusing
+    // existing, already-tuned code rather than adding a second latency concept.
+    canalithState = initialCanalithState();
+  }
+
+  const useAttachedCupulaPhysics = selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased;
+  if (useAttachedCupulaPhysics) {
+    // Cupulolithiasis (still attached): debris is fixed to the cupula, not free-floating
+    // -- no position, no latency gate, no clot-inertia lag.
+    beta = updateCupula(beta, cupulolithiasisDrive(gHead, selector), dt);
+  } else {
+    // Canalithiasis, OR cupulolithiasis debris that has been mechanically released and
+    // is now free-floating -- same physics either way.
     canalithState = updateCanalith(canalithState, gHead, dt, selector);
     const cleared = isCleared(canalithState.s);
     // The cupula is driven by the clot's ACTUAL (latency-gated, lagged) velocity, not
     // the instantaneous target -- so during the latency period, before the clot is
     // released, there is correctly no endolymph flow and no nystagmus either.
     beta = cleared ? relaxOnly(beta, dt) : updateCupula(beta, canalithState.dsdt, dt);
-  } else {
-    // Cupulolithiasis: debris is fixed to the cupula, not free-floating -- no position,
-    // no latency gate, no clot-inertia lag. canalithState is simply left untouched (its
-    // stale s/dsdt/latency values are never read while in this mode).
-    beta = updateCupula(beta, cupulolithiasisDrive(gHead, selector), dt);
   }
   vor = updateVor(vor, beta, dt, selector.canal);
 
@@ -249,9 +293,22 @@ setInterval(() => {
 
 function renderFrame(): void {
   eyeScene.setEyeAngle(decomposeEyeMovement(vor.eyeAngle, selector));
-  // Cupulolithiasis debris never moves along the duct -- pin the rendered marker at the
-  // cupula (s=0) rather than showing the last (stale, unmoving) canalithiasis s value.
-  canalScene.setClotArcPosition(selector.pathology === 'cupulolithiasis' ? 0 : canalithState.s);
+  // Attached cupulolithiasis debris never moves along the duct -- pin the rendered
+  // marker at the cupula (s=0). Once released (see stepPhysicsOnce), it follows
+  // canalithState.s like ordinary canalithiasis -- the "crystals peel off the cupula and
+  // drift into the duct" visual is a direct consequence of this switch, not a scripted
+  // animation.
+  const useAttachedCupulaPhysics = selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased;
+  canalScene.setDebrisAttached(useAttachedCupulaPhysics);
+  canalScene.setClotArcPosition(useAttachedCupulaPhysics ? 0 : canalithState.s);
+  // Legend reflects the CURRENT attachment state, not just the selected pathology --
+  // updated every frame (cheap textContent set) so it flips the moment release happens,
+  // same as the debug readout below.
+  legendClotLabel.textContent = useAttachedCupulaPhysics
+    ? 'Debris (fixed to cupula)'
+    : selector.pathology === 'cupulolithiasis'
+      ? 'Debris (released, free-floating)'
+      : 'Otoconia clot';
   canalScene.setCupulaDeflection(beta);
   canalScene.setOrientation(lastQHead);
   headScene.setOrientation(lastQHead);
@@ -265,14 +322,15 @@ function renderFrame(): void {
   controls.setProgress(fraction, maneuverPlayer.currentLabel);
   controls.setPlayingLabel(maneuverPlayer.isPlaying);
   const eyeComponentsDebug = decomposeEyeMovement(vor.eyeAngle, selector);
-  const pathologyStatus =
-    selector.pathology === 'canalithiasis'
-      ? `s=${canalithState.s.toFixed(3)} rad  ds/dt=${canalithState.dsdt.toFixed(3)}  (${
-          canalithState.released ? 'released' : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`
-        })  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})`
-      : `cupulolithiasis: gravity-driven, no latency, debris ${
-          selector.debrisOnUtricularSide ? 'utricular-side' : 'canal-side'
-        }`;
+  const pathologyStatus = useAttachedCupulaPhysics
+    ? `cupulolithiasis: ATTACHED to cupula, gravity-driven, no latency, debris ${
+        selector.debrisOnUtricularSide ? 'utricular-side' : 'canal-side'
+      }`
+    : `s=${canalithState.s.toFixed(3)} rad  ds/dt=${canalithState.dsdt.toFixed(3)}  (${
+        canalithState.released ? 'released' : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`
+      })  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})${
+        selector.pathology === 'cupulolithiasis' ? '  [RELEASED FROM CUPULA]' : ''
+      }`;
   controls.setDebugReadout(
     `${pathologyStatus}  beta=${beta.toFixed(3)}  eye=${vor.eyeAngle.toFixed(
       3

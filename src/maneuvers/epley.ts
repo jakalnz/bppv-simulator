@@ -35,13 +35,16 @@ export function buildEpley(side: EarSide): Maneuver {
     waypoints: [
       { t: 0, quat: upright, label: 'Seated upright' },
       { t: 2, quat: turned45, label: `Head turned 45° ${side}` },
-      { t: 3, quat: supineHeadHanging, label: 'Reclined to supine, head hanging (Dix-Hallpike)' },
-      { t: 33, quat: supineHeadHanging, label: 'Hold' },
-      { t: 36, quat: supineHeadHangingOpposite, label: 'Head turned 45° to the other side, still supine' },
-      { t: 66, quat: supineHeadHangingOpposite, label: 'Hold' },
-      { t: 69, quat: sideLyingFaceDown, label: 'Roll onto shoulder, face down' },
-      { t: 99, quat: sideLyingFaceDown, label: 'Hold' },
-      { t: 102, quat: upright, label: 'Sit up' },
+      // Deliberately gentle (2s), same reasoning as dixHallpike.ts -- Epley's mechanism is
+      // sustained gravity walking free-floating debris around the duct, not a rapid-
+      // deceleration release, so this must stay well below the release threshold.
+      { t: 4, quat: supineHeadHanging, label: 'Reclined to supine, head hanging (Dix-Hallpike)' },
+      { t: 34, quat: supineHeadHanging, label: 'Hold' },
+      { t: 37, quat: supineHeadHangingOpposite, label: 'Head turned 45° to the other side, still supine' },
+      { t: 67, quat: supineHeadHangingOpposite, label: 'Hold' },
+      { t: 70, quat: sideLyingFaceDown, label: 'Roll onto shoulder, face down' },
+      { t: 100, quat: sideLyingFaceDown, label: 'Hold' },
+      { t: 103, quat: upright, label: 'Sit up' },
     ],
   };
 }

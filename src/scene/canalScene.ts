@@ -35,6 +35,22 @@ const PARTICLE_OFFSETS: [number, number, number][] = [
   [-0.45, -0.1, 0.4],
 ];
 
+const AMPULLA_RADIUS_SCENE = DUCT_TUBE_RADIUS_SCENE * 2.1;
+const AMPULLA_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0xd98fa0,
+  transparent: true,
+  opacity: 0.45,
+  side: THREE.DoubleSide,
+});
+const HAIR_CELL_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xf2e9d8 });
+const NERVE_FIBER_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xe0c23a });
+const DETAILED_CUPULA_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x2ec4c6,
+  transparent: true,
+  opacity: 0.85,
+  side: THREE.DoubleSide,
+});
+
 const BASIC_DUCT_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xd7c9c9,
   transparent: true,
@@ -64,7 +80,7 @@ const EXCLUDED_NODE_NAMES = new Set(['pPlane1', 'pPlane3']);
 // backdrop, not a metrically accurate overlay.
 const LABYRINTH_TARGET_SIZE = CANAL_RADIUS_M * 9;
 
-export type CanalStyle = 'basic' | 'realistic';
+export type CanalStyle = 'basic' | 'realistic' | 'detailed';
 
 /**
  * Cutaway view of the posterior canal duct: the duct path, the moving otoconia clot,
@@ -93,6 +109,14 @@ export class CanalScene {
   private readonly clotCluster: THREE.Group;
   private readonly cupulaMembrane: THREE.Mesh;
   private crusMarker: THREE.Mesh;
+  // "Detailed" style extras -- see buildDetailedAmpulla/buildDetailedCupulaDome/
+  // buildHairCellTufts/buildNerveFiber. Decorative/schematic (matching the iconography of
+  // clinical illustrations, e.g. Fig. 3 in Parnes/Agrawal/Atlas 2003), not physics-driven,
+  // except detailedCupulaDome which gets the same beta-driven deflection as cupulaMembrane.
+  private readonly ampullaBulb: THREE.Mesh;
+  private readonly detailedCupulaDome: THREE.Mesh;
+  private readonly hairCellTufts: THREE.Group;
+  private readonly nerveFiber: THREE.Mesh;
   private readonly labyrinthBackdrop = new THREE.Group();
   private labyrinthWrapper: THREE.Group | null = null;
   private labyrinthBaseScale = 1;
@@ -126,6 +150,17 @@ export class CanalScene {
     // considered cleared into the utricle (relevant during Epley repositioning).
     this.crusMarker = this.buildCrusMarker();
     this.canalGroup.add(this.crusMarker);
+
+    // "Detailed" style extras -- built here (once) and toggled visible/hidden per style
+    // in applyStyle(), same pattern as the duct's material swap.
+    this.ampullaBulb = this.buildAmpullaBulb();
+    this.canalGroup.add(this.ampullaBulb);
+    this.detailedCupulaDome = this.buildDetailedCupulaDome();
+    this.canalGroup.add(this.detailedCupulaDome);
+    this.hairCellTufts = this.buildHairCellTufts();
+    this.canalGroup.add(this.hairCellTufts);
+    this.nerveFiber = this.buildNerveFiber();
+    this.canalGroup.add(this.nerveFiber);
 
     // Otoconia debris: a small cluster of particles, not one idealized sphere -- see
     // PARTICLE_OFFSETS. Same cluster mesh represents free-floating canalithiasis debris
@@ -192,6 +227,68 @@ export class CanalScene {
     return marker;
   }
 
+  /** Enlarged bulge at the ampulla (s=0) housing the cupula/hair cells -- "detailed" style only. */
+  private buildAmpullaBulb(): THREE.Mesh {
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(AMPULLA_RADIUS_SCENE, 20, 14), AMPULLA_MATERIAL);
+    bulb.scale.set(1, 1, 1.5); // elongated along its local Z (aligned to the duct tangent at s=0)
+    return bulb;
+  }
+
+  /**
+   * Dome-shaped cupula spanning the ampulla, for the "detailed" style -- replaces the
+   * flat CircleGeometry membrane used by basic/realistic with a hemisphere, matching how
+   * clinical illustrations (e.g. Fig. 3/4 in Parnes/Agrawal/Atlas 2003) actually draw it:
+   * a gelatinous dome sealing the ampulla, not a flat disc. Gets the same beta-driven
+   * deflection as cupulaMembrane (see setCupulaDeflection).
+   */
+  private buildDetailedCupulaDome(): THREE.Mesh {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(CUPULA_RADIUS_SCENE, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      DETAILED_CUPULA_MATERIAL
+    );
+    // The hemisphere's "cap" faces +Y by default; rotate so it faces +Z instead, matching
+    // the flat CircleGeometry membrane's own facing direction (both get the same
+    // tangent-aligned orientation in repositionForCanal/setCupulaDeflection).
+    dome.rotation.x = Math.PI / 2;
+    return dome;
+  }
+
+  /**
+   * Small radial cluster of thin cones at the cupula's base, representing hair-cell
+   * stereocilia -- decorative/schematic (matching Fig. 3's iconography), not
+   * physics-driven.
+   */
+  private buildHairCellTufts(): THREE.Group {
+    const group = new THREE.Group();
+    const tuftCount = 10;
+    const ringRadius = CUPULA_RADIUS_SCENE * 0.55;
+    for (let i = 0; i < tuftCount; i++) {
+      const angle = (i / tuftCount) * Math.PI * 2;
+      const tuft = new THREE.Mesh(
+        new THREE.ConeGeometry(DUCT_TUBE_RADIUS_SCENE * 0.06, DUCT_TUBE_RADIUS_SCENE * 0.3, 6),
+        HAIR_CELL_MATERIAL
+      );
+      tuft.position.set(Math.cos(angle) * ringRadius, Math.sin(angle) * ringRadius, DUCT_TUBE_RADIUS_SCENE * 0.1);
+      group.add(tuft);
+    }
+    return group;
+  }
+
+  /**
+   * Thin fiber leading away from the hair cells, representing the ampullary nerve branch
+   * of CN VIII -- purely decorative iconography (matching Fig. 3), not physics-driven or
+   * anatomically routed.
+   */
+  private buildNerveFiber(): THREE.Mesh {
+    const fiber = new THREE.Mesh(
+      new THREE.CylinderGeometry(DUCT_TUBE_RADIUS_SCENE * 0.12, DUCT_TUBE_RADIUS_SCENE * 0.12, CUPULA_RADIUS_SCENE * 1.8, 8),
+      NERVE_FIBER_MATERIAL
+    );
+    fiber.rotation.x = Math.PI / 2;
+    fiber.position.z = -CUPULA_RADIUS_SCENE * 0.9;
+    return fiber;
+  }
+
   /** Rebuilds duct/cupula/crus-marker geometry and positions for the current canal selector. */
   private repositionForCanal(): void {
     this.canalGroup.remove(this.duct);
@@ -201,6 +298,21 @@ export class CanalScene {
     this.canalGroup.add(this.duct);
 
     this.cupulaMembrane.position.copy(toThreeVector3(canalPosition(0, this.selector)));
+
+    // "Detailed" style extras: all positioned at the ampulla (s=0), oriented so their
+    // local Z axis (the axis each was built along) points down the duct tangent.
+    const ampullaPos = toThreeVector3(canalPosition(0, this.selector));
+    const ampullaTangent = toThreeVector3(canalTangent(0, this.selector)).normalize();
+    const ampullaQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), ampullaTangent);
+    for (const mesh of [this.ampullaBulb, this.detailedCupulaDome, this.hairCellTufts, this.nerveFiber]) {
+      mesh.position.copy(ampullaPos);
+      mesh.quaternion.copy(ampullaQuat);
+    }
+    // The dome and hair-cell/nerve iconography each bake in their own additional local
+    // rotation (see buildDetailedCupulaDome/buildNerveFiber) -- re-apply those AFTER the
+    // shared tangent alignment above, since setting .quaternion directly overwrote them.
+    this.detailedCupulaDome.rotateX(Math.PI / 2);
+    this.nerveFiber.rotateX(Math.PI / 2);
 
     this.crusMarker.position.copy(toThreeVector3(canalPosition(S_COMMON_CRUS, this.selector)));
     const crusTangent = toThreeVector3(canalTangent(S_COMMON_CRUS, this.selector)).normalize();
@@ -232,6 +344,14 @@ export class CanalScene {
   private applyStyle(): void {
     this.duct.material = this.style === 'realistic' ? REALISTIC_DUCT_MATERIAL : BASIC_DUCT_MATERIAL;
     this.labyrinthBackdrop.visible = this.style === 'realistic';
+    const detailed = this.style === 'detailed';
+    this.ampullaBulb.visible = detailed;
+    this.detailedCupulaDome.visible = detailed;
+    this.hairCellTufts.visible = detailed;
+    this.nerveFiber.visible = detailed;
+    // The flat disc membrane is replaced by the dome in "detailed" style, not shown
+    // alongside it.
+    this.cupulaMembrane.visible = !detailed;
   }
 
   /**
@@ -284,22 +404,48 @@ export class CanalScene {
     this.canalGroup.quaternion.copy(toThreeQuaternion(qHead));
   }
 
+  /**
+   * Whether the debris cluster is currently attached to the cupula (still-attached
+   * cupulolithiasis) rather than free-floating -- only affects the "detailed" style,
+   * which presses the cluster against the dome's convex surface instead of floating
+   * beside it (see setClotArcPosition). Basic/realistic styles don't distinguish this
+   * visually (the cluster already reads as "at the ampulla" either way there).
+   */
+  private debrisAttachedToCupula = false;
+
+  setDebrisAttached(attached: boolean): void {
+    this.debrisAttachedToCupula = attached;
+  }
+
   setClotArcPosition(s: number): void {
-    this.clotCluster.position.copy(toThreeVector3(canalPosition(s, this.selector)));
+    const tangent = toThreeVector3(canalTangent(s, this.selector)).normalize();
+    const position = toThreeVector3(canalPosition(s, this.selector));
+    if (this.style === 'detailed' && this.debrisAttachedToCupula) {
+      // Press the cluster against the dome's convex outer surface (offset outward along
+      // the tangent by the dome's own radius) rather than floating at the ampulla's
+      // center point, matching how clinical illustrations show cupulolithiasis debris
+      // sitting ON the cupula (e.g. Fig. 4 in Parnes/Agrawal/Atlas 2003).
+      position.add(tangent.clone().multiplyScalar(CUPULA_RADIUS_SCENE * 0.9));
+    }
+    this.clotCluster.position.copy(position);
     // Orient the cluster's jitter pattern along the local duct tangent so it reads as an
     // elongated conglomerate mass in the duct's own direction, not a fixed world-aligned
     // blob (matches the clinical illustrations this cluster is based on -- see
     // PARTICLE_OFFSETS).
-    const tangent = toThreeVector3(canalTangent(s, this.selector)).normalize();
     this.clotCluster.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tangent);
   }
 
   setCupulaDeflection(beta: number): void {
     const deflectionScale = 1 + Math.max(-0.6, Math.min(0.6, beta * 0.05));
-    this.cupulaMembrane.scale.setScalar(deflectionScale);
     const tangent = toThreeVector3(canalTangent(0, this.selector)).normalize();
-    const bulge = tangent.multiplyScalar(Math.max(-1, Math.min(1, beta * 0.02)) * DUCT_TUBE_RADIUS_SCENE * 2);
-    this.cupulaMembrane.position.copy(toThreeVector3(canalPosition(0, this.selector))).add(bulge);
+    const bulge = tangent.clone().multiplyScalar(Math.max(-1, Math.min(1, beta * 0.02)) * DUCT_TUBE_RADIUS_SCENE * 2);
+    const basePosition = toThreeVector3(canalPosition(0, this.selector));
+
+    this.cupulaMembrane.scale.setScalar(deflectionScale);
+    this.cupulaMembrane.position.copy(basePosition).add(bulge);
+
+    this.detailedCupulaDome.scale.setScalar(deflectionScale);
+    this.detailedCupulaDome.position.copy(basePosition).add(bulge);
   }
 
   render(): void {

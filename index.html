@@ -32,7 +32,11 @@
         <div class="view-panel">
           <h2>
             <span id="canal-panel-title">Posterior canal</span> (cutaway)
-            <button id="canal-style-toggle" class="inline-toggle" type="button">Realistic</button>
+            <select id="canal-style-select" class="inline-toggle">
+              <option value="basic">Basic</option>
+              <option value="realistic" selected>Realistic</option>
+              <option value="detailed">Detailed</option>
+            </select>
           </h2>
           <canvas id="canal-canvas"></canvas>
           <div class="canal-legend">

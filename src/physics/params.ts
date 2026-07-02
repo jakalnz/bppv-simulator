@@ -96,3 +96,34 @@ export const QUICK_PHASE_RESET_AMOUNT = 0.3;
  * nystagmus and only differ in onset/decay shape, not overall magnitude.
  */
 export const CUPULA_GRAVITY_GAIN = 0.08;
+
+/**
+ * Angular speed (rad/s) a head movement must exceed to count as "rapid" -- the
+ * mechanical trigger that knocks cupula-adherent debris loose, converting
+ * cupulolithiasis into free-floating canalithiasis (see cupulaRelease.ts). Semont's and
+ * Zuma's designated rapid transitions are deliberately built to exceed this (see
+ * maneuvers/semont.ts, maneuvers/zuma.ts); Dix-Hallpike/Epley/roll-test/BBQ-roll's
+ * transitions are deliberately built to stay below it (their provocation mechanism is
+ * sustained gravity on already-free debris, not a mechanical release).
+ *
+ * Picked from a real numeric gap, not guessed: peak angular speed reached by every
+ * existing maneuver's transitions (measured via quatAngleBetween finite differences at
+ * FIXED_DT) clusters at <= ~1.06 rad/s for the gentle maneuvers and >= ~1.58 rad/s for
+ * the rapid ones -- see the discriminating acceptance test in
+ * physics/cupulaRelease.test.ts, which is the actual arbiter if these maneuvers'
+ * waypoint timings ever change.
+ */
+export const RAPID_SPEED_THRESHOLD = 1.3;
+
+/**
+ * Once angular speed has exceeded RAPID_SPEED_THRESHOLD, release triggers when it drops
+ * back below this (rad/s) -- i.e. the head has now stopped/decelerated after the rapid
+ * movement. This is deliberately NOT a raw instantaneous-deceleration threshold: at this
+ * simulator's fixed timestep, EVERY scripted waypoint transition (rapid or gentle) ends
+ * in a one-frame velocity discontinuity down to the next waypoint's speed, so a naive
+ * "deceleration exceeds X" check would fire on gentle transitions just as often as rapid
+ * ones (confirmed empirically -- see cupulaRelease.test.ts's comments). Gating on
+ * "was moving fast, has now nearly stopped" avoids that false-positive entirely and
+ * still captures the real clinical mechanism (rapid motion followed by an abrupt stop).
+ */
+export const RELEASE_STOP_SPEED = 0.3;

@@ -64,14 +64,22 @@ export function buildZuma(side: EarSide): Maneuver {
     name: `Zuma (${side})`,
     waypoints: [
       { t: 0, quat: upright, label: 'Seated upright' },
-      { t: 2, quat: lieOnAffectedSide, label: `Lie down on ${side} (affected) side` },
-      { t: 22, quat: lieOnAffectedSide, label: 'Hold' },
-      { t: 24, quat: headTowardCeiling, label: 'Head rotated 90° toward the ceiling' },
-      { t: 44, quat: headTowardCeiling, label: 'Hold' },
-      { t: 46, quat: supineHeadTurnedAway, label: `Supine, head turned 90° toward ${opposite} (unaffected) side` },
-      { t: 66, quat: supineHeadTurnedAway, label: 'Hold' },
-      { t: 68, quat: headTiltedForward, label: 'Head tilted slightly forward' },
-      { t: 71, quat: upright, label: 'Slowly return to sitting' },
+      // Steps I-III are each done rapidly per the source paper ("quick movement; brisk
+      // deceleration" for step I, "rapid angular acceleration" for steps II-III) -- this
+      // is the actual mechanical release mechanism (see physics/cupulaRelease.ts), not
+      // just pacing, so these transitions are deliberately fast (~0.8s each), unlike
+      // Dix-Hallpike/Epley's deliberately gentle transitions. Verified numerically that
+      // this reaches a peak angular speed cleanly above the release threshold.
+      { t: 0.8, quat: lieOnAffectedSide, label: `Lie down on ${side} (affected) side` },
+      { t: 20.8, quat: lieOnAffectedSide, label: 'Hold' },
+      { t: 21.6, quat: headTowardCeiling, label: 'Head rotated 90° toward the ceiling' },
+      { t: 41.6, quat: headTowardCeiling, label: 'Hold' },
+      { t: 42.4, quat: supineHeadTurnedAway, label: `Supine, head turned 90° toward ${opposite} (unaffected) side` },
+      { t: 62.4, quat: supineHeadTurnedAway, label: 'Hold' },
+      // Steps IV-V are deliberately NOT rapid (the paper describes step IV as simply
+      // "encouraging" particle movement toward the utricle, and step V as a slow return).
+      { t: 64.4, quat: headTiltedForward, label: 'Head tilted slightly forward' },
+      { t: 67.4, quat: upright, label: 'Slowly return to sitting' },
     ],
   };
 }
