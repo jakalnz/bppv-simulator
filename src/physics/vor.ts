@@ -1,4 +1,4 @@
-import { GAIN_VOR, QUICK_PHASE_THRESHOLD, QUICK_PHASE_RESET_AMOUNT } from './params';
+import { GAIN_VOR, INHIBITORY_GAIN_FRACTION, QUICK_PHASE_THRESHOLD, QUICK_PHASE_RESET_AMOUNT } from './params';
 import { AMPULLOFUGAL_IS_EXCITATORY, CANAL_PLANE_NORMAL, CanalSelector } from './canal';
 import { RAD2DEG } from './types';
 
@@ -24,10 +24,18 @@ export function initialVorState(): VorState {
  * AMPULLOFUGAL_IS_EXCITATORY in canal.ts). That polarity is applied here, at the one
  * place cupula deflection becomes an eye-movement direction, rather than baked into the
  * canal geometry, so the geometric ampullofugal-positive convention stays uniform.
+ *
+ * Ewald's SECOND law (a separate fact from the excitatory/inhibitory polarity above):
+ * an excitatory stimulus produces a LARGER response than an equal-magnitude inhibitory
+ * one (afferent firing can increase without bound but can only decrease to zero) -- see
+ * INHIBITORY_GAIN_FRACTION in params.ts. Applied to the drive (post-polarity, so it's a
+ * pure magnitude scale on top of the direction decided above, never a second sign flip).
  */
 export function updateVor(state: VorState, beta: number, dt: number, canal: CanalSelector['canal']): VorState {
   const polarity = AMPULLOFUGAL_IS_EXCITATORY[canal] ? 1 : -1;
-  const omegaSlow = polarity * GAIN_VOR * beta;
+  const drive = polarity * beta; // >0 excitatory, <0 inhibitory
+  const gain = drive >= 0 ? GAIN_VOR : GAIN_VOR * INHIBITORY_GAIN_FRACTION;
+  const omegaSlow = gain * drive;
   let eyeAngle = state.eyeAngle + omegaSlow * dt;
   if (Math.abs(eyeAngle) > QUICK_PHASE_THRESHOLD) {
     eyeAngle -= Math.sign(eyeAngle) * QUICK_PHASE_RESET_AMOUNT;

@@ -16,6 +16,25 @@ const CLOT_RADIUS_SCENE = CANAL_RADIUS_M * 0.28;
 const DUCT_TUBE_RADIUS_SCENE = CANAL_RADIUS_M * 0.22;
 const CUPULA_RADIUS_SCENE = DUCT_TUBE_RADIUS_SCENE * 2.4;
 
+const PARTICLE_RADIUS_SCENE = CLOT_RADIUS_SCENE * 0.42;
+/**
+ * Fixed local jitter offsets (unitless, scaled by PARTICLE_RADIUS_SCENE below) for the
+ * otoconia cluster -- a single idealized sphere doesn't read as debris; clinical
+ * illustrations (e.g. Fig. 4/5 in Parnes/Agrawal/Atlas, "Diagnosis and management of
+ * BPPV", CMAJ 2003;169(7):681-93) show a granular conglomerate mass. Deterministic, not
+ * re-randomized each frame, so the cluster's shape stays stable as it moves along the
+ * duct or (pinned) sits on the cupula.
+ */
+const PARTICLE_OFFSETS: [number, number, number][] = [
+  [0, 0, 0],
+  [0.55, 0.25, 0.1],
+  [-0.5, 0.3, -0.15],
+  [0.2, -0.5, 0.3],
+  [-0.3, -0.4, -0.25],
+  [0.15, 0.5, -0.35],
+  [-0.45, -0.1, 0.4],
+];
+
 const BASIC_DUCT_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xd7c9c9,
   transparent: true,
@@ -71,7 +90,7 @@ export class CanalScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly canalGroup = new THREE.Group();
   private duct: THREE.Mesh;
-  private readonly clot: THREE.Mesh;
+  private readonly clotCluster: THREE.Group;
   private readonly cupulaMembrane: THREE.Mesh;
   private crusMarker: THREE.Mesh;
   private readonly labyrinthBackdrop = new THREE.Group();
@@ -108,12 +127,13 @@ export class CanalScene {
     this.crusMarker = this.buildCrusMarker();
     this.canalGroup.add(this.crusMarker);
 
-    // Otoconia clot.
-    this.clot = new THREE.Mesh(
-      new THREE.SphereGeometry(CLOT_RADIUS_SCENE, 16, 12),
-      new THREE.MeshStandardMaterial({ color: 0xc9a227 })
-    );
-    this.canalGroup.add(this.clot);
+    // Otoconia debris: a small cluster of particles, not one idealized sphere -- see
+    // PARTICLE_OFFSETS. Same cluster mesh represents free-floating canalithiasis debris
+    // (positioned along the duct at arc position s) and cupula-adherent cupulolithiasis
+    // debris (pinned at s=0, see main.ts's clot-position override) -- only the driving
+    // position differs, not the visual.
+    this.clotCluster = this.buildClotCluster();
+    this.canalGroup.add(this.clotCluster);
 
     this.canalGroup.add(this.labyrinthBackdrop);
     this.scene.add(this.canalGroup);
@@ -147,6 +167,21 @@ export class CanalScene {
     const ductCurve = new THREE.CatmullRomCurve3(points);
     const ductGeometry = new THREE.TubeGeometry(ductCurve, 200, DUCT_TUBE_RADIUS_SCENE, 12, false);
     return new THREE.Mesh(ductGeometry, REALISTIC_DUCT_MATERIAL);
+  }
+
+  private buildClotCluster(): THREE.Group {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: 0xc9a227 });
+    for (const [ox, oy, oz] of PARTICLE_OFFSETS) {
+      const particle = new THREE.Mesh(new THREE.SphereGeometry(PARTICLE_RADIUS_SCENE, 10, 8), material);
+      particle.position.set(
+        ox * PARTICLE_RADIUS_SCENE * 1.3,
+        oy * PARTICLE_RADIUS_SCENE * 1.3,
+        oz * PARTICLE_RADIUS_SCENE * 1.3
+      );
+      group.add(particle);
+    }
+    return group;
   }
 
   private buildCrusMarker(): THREE.Mesh {
@@ -250,7 +285,13 @@ export class CanalScene {
   }
 
   setClotArcPosition(s: number): void {
-    this.clot.position.copy(toThreeVector3(canalPosition(s, this.selector)));
+    this.clotCluster.position.copy(toThreeVector3(canalPosition(s, this.selector)));
+    // Orient the cluster's jitter pattern along the local duct tangent so it reads as an
+    // elongated conglomerate mass in the duct's own direction, not a fixed world-aligned
+    // blob (matches the clinical illustrations this cluster is based on -- see
+    // PARTICLE_OFFSETS).
+    const tangent = toThreeVector3(canalTangent(s, this.selector)).normalize();
+    this.clotCluster.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tangent);
   }
 
   setCupulaDeflection(beta: number): void {

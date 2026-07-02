@@ -50,13 +50,35 @@ export const KAPPA_FLOW = 1.0;
 export const TAU_CUPULA = 4.0;
 
 /**
- * Slow-phase eye angular velocity = GAIN_VOR * cupula deflection.
+ * Slow-phase eye angular velocity = GAIN_VOR * cupula deflection (scaled further by
+ * INHIBITORY_GAIN_FRACTION for inhibitory-direction deflection -- see updateVor).
  * Tuned so a typical paroxysm (cupula deflection peaking in the 1-2.5 range from the
  * canalith model) produces slow-phase velocities in the clinically observed range for a
  * positive Dix-Hallpike (roughly 20-100+ deg/s, i.e. ~0.35-1.75 rad/s) with several
  * beats visible per second, rather than a single barely-visible drift.
  */
 export const GAIN_VOR = 0.6;
+
+/**
+ * Ewald's second law: an EXCITATORY stimulus (increased afferent firing) produces a
+ * larger vestibulo-ocular response than an equal-magnitude INHIBITORY stimulus
+ * (decreased firing, which can only fall to zero, not go negative) -- a real
+ * physiological asymmetry, not a modeling choice. This is the mechanism behind a real
+ * diagnostic sign: in the supine roll test, the roll direction that produces the
+ * STRONGER nystagmus identifies both the affected ear and the pathology (Table 1,
+ * Parnes/Agrawal/Atlas, "Diagnosis and management of BPPV", CMAJ 2003;169(7):681-93) --
+ * e.g. right horizontal canalithiasis gives stronger GEOTROPIC nystagmus rolling right
+ * (toward the affected/excitatory side), while right horizontal cupulolithiasis gives
+ * stronger APOGEOTROPIC nystagmus rolling LEFT (away from the affected ear, since
+ * turning toward it is the inhibitory direction there). Without this asymmetry, both
+ * roll directions produce equal-magnitude nystagmus and that diagnostic sign is lost.
+ * Applied uniformly in updateVor (not just for the horizontal canal), so it also
+ * predicts a Dix-Hallpike reversal-on-sitting-up burst that's weaker than the
+ * provoking one -- also clinically correct, not a side effect to work around.
+ * Tuned (< 1), not measured -- see physics/ewaldAsymmetry.test.ts for the Table 1
+ * acceptance test this value needs to satisfy.
+ */
+export const INHIBITORY_GAIN_FRACTION = 0.5;
 
 /** Eye deviation (radians) beyond which a quick-phase (fast corrective saccade) fires. */
 export const QUICK_PHASE_THRESHOLD = 0.35;
