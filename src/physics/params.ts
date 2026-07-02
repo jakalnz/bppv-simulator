@@ -127,3 +127,33 @@ export const RAPID_SPEED_THRESHOLD = 1.3;
  * still captures the real clinical mechanism (rapid motion followed by an abrupt stop).
  */
 export const RELEASE_STOP_SPEED = 0.3;
+
+/**
+ * Low-pass filter time constant (seconds) applied to angular speed before it's compared
+ * against RAPID_SPEED_THRESHOLD/RELEASE_STOP_SPEED (see cupulaRelease.ts). Needed
+ * because mouse-drag/gyro orientation sources apply raw input-event deltas immediately
+ * with no smoothing of their own, so a single noisy/bursty sample (multiple pointermove
+ * events landing within one physics tick, or a jittery gyro reading) can otherwise read
+ * as an instantaneous "impossible" speed spike -- confirmed empirically: an unsmoothed
+ * fast synthetic drag false-triggered release. Smoothing damps a single anomalous tick
+ * while still letting a SUSTAINED rapid movement (a real maneuver's ~0.8-1s rapid
+ * transition, or a deliberate fast head-turn via mouse/gyro held for a comparable
+ * duration) rise past the threshold -- verified numerically in cupulaRelease.test.ts.
+ */
+export const RELEASE_SPEED_SMOOTHING_TAU = 0.1;
+
+/**
+ * Hard ceiling (rad/s) applied to a raw angular-speed sample BEFORE smoothing (see
+ * RELEASE_SPEED_SMOOTHING_TAU). Smoothing alone isn't enough: a single extreme spike
+ * (many pointermove events landing within one physics tick) still leaves the smoothed
+ * value elevated for several time constants afterward, eventually decaying past
+ * RELEASE_STOP_SPEED and firing anyway -- just delayed, not actually rejected (confirmed
+ * empirically). Clamping the raw sample first means even a massively-batched single-tick
+ * artifact can only push the smoothed value up by a bounded, small amount, so it alone
+ * can never arm the detector -- only a SUSTAINED run of samples near or above this
+ * ceiling (a real fast movement held over multiple ticks) can. Set well above Semont-
+ * liberatory's verified peak (~3.14 rad/s, see cupulaRelease.test.ts) so genuine rapid
+ * maneuvers/movements are unaffected, but far below what a batch of input events can
+ * produce in one tick (tens of rad/s).
+ */
+export const MAX_PLAUSIBLE_ANGULAR_SPEED = 6;

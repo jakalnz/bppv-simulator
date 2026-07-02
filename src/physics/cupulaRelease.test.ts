@@ -77,7 +77,7 @@ function runWithRelease(maneuver: Maneuver, selector: CanalSelector) {
     prevQ = qHead;
 
     let released: boolean;
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed);
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, DT);
     if (selector.pathology === 'cupulolithiasis' && !debrisReleased && released) {
       debrisReleased = true;
       releasedAtStep = i;
@@ -150,7 +150,7 @@ describe('cupula release integration', () => {
       const angularSpeed = quatAngleBetween(prevQ, q) / DT;
       prevQ = q;
       let released: boolean;
-      [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed);
+      [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, DT);
       if (released) debrisReleased = true;
     }
     expect(debrisReleased).toBe(false);
@@ -190,8 +190,57 @@ describe('cupula release integration', () => {
     let releaseDetector = initialReleaseDetector();
     let released: boolean;
     const fixedAngularSpeed = quatAngleBetween(newManeuverStartPose, newManeuverStartPose) / DT; // = 0
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, fixedAngularSpeed);
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, 0.5); // gentle motion afterward
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, fixedAngularSpeed, DT);
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, 0.5, DT); // gentle motion afterward
     expect(released).toBe(false);
+  });
+
+  /**
+   * Now that mouse-drag/gyro sources are allowed to trigger release too (see
+   * cupulaRelease.ts's smoothing), this is the actual bug that previously forced
+   * excluding them entirely: MouseDragSource applies raw pointermove deltas to
+   * orientation immediately, so several events landing within one physics tick can
+   * produce a single-tick angular speed reading far beyond anything a real head could
+   * do. The low-pass filter must damp that single anomalous tick without preventing a
+   * genuinely SUSTAINED fast movement (held over a realistic duration) from still
+   * triggering.
+   */
+  it('a single-tick speed spike is rejected outright, not just delayed', () => {
+    // Single anomalous tick: speed spikes far above threshold for exactly one sample
+    // (simulating a burst of pointermove events collapsed into one physics tick), then
+    // returns to a normal idle rate. Checked over a full second afterward, not just a
+    // few ticks -- an earlier version of this test only checked 8 ticks post-spike and
+    // passed even though smoothing ALONE (without the MAX_PLAUSIBLE_ANGULAR_SPEED clamp)
+    // only delays the false release by ~0.2-0.3s rather than actually preventing it, as
+    // confirmed by manual browser testing. This is why the clamp exists.
+    let spikeDetector = initialReleaseDetector();
+    let spikeReleased = false;
+    const steps = [40, ...Array(Math.ceil(1 / DT)).fill(0.05)];
+    for (const speed of steps) {
+      let released: boolean;
+      [spikeDetector, released] = updateReleaseDetector(spikeDetector, speed, DT);
+      if (released) spikeReleased = true;
+    }
+    expect(spikeReleased).toBe(false);
+
+    // Sustained rapid movement: speed stays above threshold for ~0.3s (comparable to a
+    // real deliberate fast mouse-drag or head-turn held for a realistic duration, and to
+    // Semont/Zuma's own ~0.8-1s rapid transitions), then stops.
+    let sustainedDetector = initialReleaseDetector();
+    let sustainedReleased = false;
+    const sustainedSteps = Math.ceil(0.3 / DT);
+    for (let i = 0; i < sustainedSteps; i++) {
+      let released: boolean;
+      [sustainedDetector, released] = updateReleaseDetector(sustainedDetector, 2.5, DT);
+      if (released) sustainedReleased = true;
+    }
+    // Decay phase long enough for the smoothed speed to actually fall back below
+    // RELEASE_STOP_SPEED (several smoothing time constants), not just a couple of ticks.
+    for (let i = 0; i < Math.ceil(0.5 / DT); i++) {
+      let released: boolean;
+      [sustainedDetector, released] = updateReleaseDetector(sustainedDetector, 0, DT);
+      if (released) sustainedReleased = true;
+    }
+    expect(sustainedReleased).toBe(true);
   });
 });

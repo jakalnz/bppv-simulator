@@ -217,24 +217,13 @@ function stepPhysicsOnce(dt: number): void {
   const gHead = rotateVec(quatInvert(qHead), G_WORLD);
 
   // Angular speed since last tick, and whether that constitutes a rapid-movement-then-
-  // stop event -- see physics/cupulaRelease.ts for why this is a hysteresis crossing
-  // detector rather than a raw instantaneous-deceleration check.
-  //
-  // Only evaluated in scripted-maneuver mode: MouseDragSource/DeviceOrientationSource
-  // apply raw input-event deltas to orientation immediately, with no per-frame
-  // smoothing, so a burst of pointermove events landing within one physics tick can
-  // jump the orientation multiple times before the next sample -- an artifact of
-  // event-driven input timing, not a real rapid head movement (confirmed via manual
-  // testing: a fast synthetic drag produced an artificially huge single-tick angular
-  // speed and false-triggered release). The scripted maneuvers' waypoint timings, by
-  // contrast, were deliberately built and numerically verified for this purpose (see
-  // physics/cupulaRelease.test.ts) -- their speed readings are trustworthy.
+  // stop event -- see physics/cupulaRelease.ts for why this is a smoothed hysteresis
+  // crossing detector (not a raw instantaneous check), which is what makes it safe to
+  // evaluate regardless of orientation source (scripted maneuver, mouse-drag, or gyro).
   const angularSpeed = quatAngleBetween(prevQHeadForVelocity, qHead) / dt;
   prevQHeadForVelocity = qHead;
-  let released = false;
-  if (mode === 'maneuver') {
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed);
-  }
+  let released: boolean;
+  [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, dt);
   if (selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased && released) {
     cupulaDebrisReleased = true;
     // Debris starts its free-floating life at the ampulla (s=0), same convention as
@@ -354,4 +343,10 @@ if (import.meta.env.DEV) {
     for (let i = 0; i < steps; i++) stepPhysicsOnce(FIXED_DT);
     renderFrame();
   };
+  (window as unknown as { __bppvDebugReleaseState: () => unknown }).__bppvDebugReleaseState = () => ({
+    armed: releaseDetector.armed,
+    smoothedSpeed: releaseDetector.smoothedSpeed,
+    cupulaDebrisReleased,
+    mode,
+  });
 }

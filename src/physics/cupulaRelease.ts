@@ -1,37 +1,46 @@
-import { RAPID_SPEED_THRESHOLD, RELEASE_STOP_SPEED } from './params';
+import { MAX_PLAUSIBLE_ANGULAR_SPEED, RAPID_SPEED_THRESHOLD, RELEASE_SPEED_SMOOTHING_TAU, RELEASE_STOP_SPEED } from './params';
 
 /**
- * Tracks whether a rapid head movement (angular speed exceeding RAPID_SPEED_THRESHOLD)
- * has occurred and subsequently stopped (speed dropped back below RELEASE_STOP_SPEED) --
- * a two-threshold hysteresis crossing-detector, not a single instantaneous check, so a
- * momentary noisy sample can't straddle one threshold and false-trigger. "Armed" once
- * speed crosses above the high threshold; fires (returns true) the first time armed
+ * Tracks whether a rapid head movement (SMOOTHED angular speed exceeding
+ * RAPID_SPEED_THRESHOLD) has occurred and subsequently stopped (dropped back below
+ * RELEASE_STOP_SPEED) -- a two-threshold hysteresis crossing-detector on top of a
+ * low-pass filter, not a single instantaneous check, so neither a momentary noisy
+ * sample nor a single anomalous tick can false-trigger. "Armed" once smoothed speed
+ * crosses above the high threshold; fires (returns true) the first time armed smoothed
  * speed then crosses below the low threshold; resets to unarmed either way.
  *
- * main.ts only feeds this detector real angular-speed samples while a scripted maneuver
- * is driving orientation -- mouse-drag/gyro sources apply raw input-event deltas
- * immediately with no per-frame smoothing, so their instantaneous speed readings aren't
- * a reliable signal here (confirmed empirically: a fast synthetic drag produced an
- * artificially huge single-tick speed and false-triggered release). Scripted maneuvers'
- * waypoint timings were deliberately built and numerically verified for this purpose.
+ * The smoothing (see RELEASE_SPEED_SMOOTHING_TAU) is what makes this safe to feed from
+ * ANY orientation source, including mouse-drag/gyro, which apply raw input-event deltas
+ * immediately with no smoothing of their own and can otherwise produce an
+ * instantaneous "impossible" speed spike from a single bursty sample (confirmed
+ * empirically: an unsmoothed fast synthetic drag false-triggered release before this
+ * was added).
  */
 export interface CupulaReleaseDetector {
   armed: boolean;
+  smoothedSpeed: number;
 }
 
 export function initialReleaseDetector(): CupulaReleaseDetector {
-  return { armed: false };
+  return { armed: false, smoothedSpeed: 0 };
 }
 
 /** Returns [nextState, fired] -- fired is true exactly once, the frame the release trigger condition is met. */
 export function updateReleaseDetector(
   state: CupulaReleaseDetector,
-  angularSpeed: number
+  angularSpeed: number,
+  dt: number
 ): [CupulaReleaseDetector, boolean] {
+  // Clamp BEFORE smoothing -- see MAX_PLAUSIBLE_ANGULAR_SPEED's comment for why smoothing
+  // alone isn't sufficient to reject a single-tick input-event-batching artifact.
+  const clampedSpeed = Math.min(angularSpeed, MAX_PLAUSIBLE_ANGULAR_SPEED);
+  const smoothedSpeed =
+    state.smoothedSpeed + (clampedSpeed - state.smoothedSpeed) * Math.min(1, dt / RELEASE_SPEED_SMOOTHING_TAU);
+
   if (!state.armed) {
-    if (angularSpeed > RAPID_SPEED_THRESHOLD) return [{ armed: true }, false];
-    return [state, false];
+    if (smoothedSpeed > RAPID_SPEED_THRESHOLD) return [{ armed: true, smoothedSpeed }, false];
+    return [{ ...state, smoothedSpeed }, false];
   }
-  if (angularSpeed < RELEASE_STOP_SPEED) return [{ armed: false }, true];
-  return [state, false];
+  if (smoothedSpeed < RELEASE_STOP_SPEED) return [{ armed: false, smoothedSpeed }, true];
+  return [{ ...state, smoothedSpeed }, false];
 }

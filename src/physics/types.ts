@@ -76,9 +76,22 @@ export function rotateVec(q: Quat, v: Vec3): Vec3 {
  * own quat.getAngle rather than hand-deriving it from quaternion components -- this
  * project has repeatedly gotten hand-derived 3D rotation math wrong (head orientation,
  * canal handedness), so reuse the library's implementation wherever one exists.
+ *
+ * gl-matrix's quat.getAngle computes Math.acos(2*dot(a,b)^2 - 1) WITHOUT clamping that
+ * argument to [-1, 1] first -- for two orientations that are nearly identical (dot very
+ * close to +-1, common frame-to-frame for a slowly-changing or momentarily-still
+ * orientation source), ordinary floating-point rounding can push the acos argument
+ * fractionally outside that range, producing NaN. Confirmed this happens in practice
+ * with MouseDragSource, whose repeated quatCompose calls accumulate tiny normalization
+ * drift over many frames -- a NaN here poisons the cupula-release detector's smoothed
+ * speed permanently (see cupulaRelease.ts), since any comparison against NaN is false,
+ * so it can never cross back below the release threshold. Clamping here, once, is
+ * cheaper and safer than trying to keep every orientation source perfectly normalized.
  */
 export function quatAngleBetween(a: Quat, b: Quat): number {
-  return quat.getAngle(a, b);
+  const rawDot = quat.dot(a, b);
+  const clampedDot = Math.max(-1, Math.min(1, rawDot));
+  return Math.acos(Math.max(-1, Math.min(1, 2 * clampedDot * clampedDot - 1)));
 }
 
 export const DEG2RAD = Math.PI / 180;
