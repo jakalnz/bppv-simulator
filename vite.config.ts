@@ -8,7 +8,7 @@ import mkcert from 'vite-plugin-mkcert';
 // never needs mkcert's local CA install (which can prompt for Windows UAC elevation).
 const useHttps = process.env.VITE_HTTPS === '1';
 const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'bppv-simulator';
-const base = process.env.VITE_BASE_PATH ?? (process.env.GITHUB_ACTIONS ? `/${repoName}/` : '/');
+const base = process.env.VITE_BASE_PATH ?? (process.env.NODE_ENV === 'production' ? `/${repoName}/` : '/');
 
 export default defineConfig({
   base,
