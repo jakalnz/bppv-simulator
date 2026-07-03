@@ -54,6 +54,18 @@ canalStyleSelect.addEventListener('change', () => {
   canalScene.setStyle(canalStyleSelect.value as CanalStyle);
 });
 
+const gravityModeSelect = document.getElementById('gravity-mode-select') as HTMLSelectElement;
+const legendGravity = document.getElementById('legend-gravity') as HTMLDivElement;
+function applyGravityModeUi(): void {
+  const mode = gravityModeSelect.value as 'world' | 'head';
+  canalScene.setGravityMode(mode);
+  // The plumb-bob arrow is hidden in "world" mode (see canalScene's applyGravityMode) --
+  // keep its legend entry in sync so the legend never names something not on screen.
+  legendGravity.style.display = mode === 'head' ? '' : 'none';
+}
+gravityModeSelect.addEventListener('change', applyGravityModeUi);
+applyGravityModeUi();
+
 const maneuverPlayer = new ManeuverPlayer(dixHallpikeRight);
 const mouseDragSource = new MouseDragSource(headCanvas);
 const gyroSource = new DeviceOrientationSource();
@@ -97,7 +109,6 @@ function activeOrientationSource(): OrientationSource {
   return maneuverPlayer;
 }
 
-const legendCommonCrus = document.getElementById('legend-common-crus') as HTMLDivElement;
 const legendClotLabel = document.getElementById('legend-clot-label') as HTMLSpanElement;
 const canalPanelTitle = document.getElementById('canal-panel-title') as HTMLSpanElement;
 const CANAL_PANEL_TITLES: Record<CanalType, string> = {
@@ -109,10 +120,6 @@ function applyCanalChange(): void {
   maneuverPlayer.setManeuver(getManeuver(maneuverKey, selector));
   canalScene.setCanal(selector);
   canalPanelTitle.textContent = CANAL_PANEL_TITLES[selector.canal];
-  // The crus commune only exists where the anterior and posterior canals join -- the
-  // horizontal canal's non-ampullary end opens directly into the utricle, so the
-  // landmark (and its legend entry) is anatomically meaningless for it.
-  legendCommonCrus.style.display = selector.canal === 'posterior' ? '' : 'none';
   // eyeScene no longer needs a per-canal rotation axis -- it renders the same
   // horizontal/vertical/torsional decomposition (already canal-dependent via
   // decomposeEyeMovement below) that drives the VNG trace, computed fresh each frame.

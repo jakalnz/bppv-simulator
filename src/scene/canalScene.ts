@@ -8,9 +8,8 @@ import {
   CanalSelector,
   CanalType,
   S_MAX,
-  S_COMMON_CRUS,
 } from '../physics/canal';
-import { Quat, normalize } from '../physics/types';
+import { Quat, normalize, quatInvert, rotateVec } from '../physics/types';
 import { G_WORLD } from '../physics/params';
 import {
   toThreeVector3,
@@ -18,6 +17,7 @@ import {
   makeAmbientAndKeyLight,
   createRenderer,
   resizeRendererToDisplaySize,
+  HEAD_FRAME_TO_THREE,
 } from './sceneUtils';
 import { resolveAssetUrl } from './assetPaths';
 import earAnatomyData from './earAnatomy.json';
@@ -78,9 +78,9 @@ const CUPULA_RADIUS_SCENE = DUCT_TUBE_RADIUS_SCENE * 2.4;
 // large: with all 3 canals at the same low "glass" opacity, users could not tell which
 // translucent loop was the currently selected canal (looked like a misalignment bug).
 const ACTIVE_DUCT_OPACITY = 0.22;
-const INACTIVE_DUCT_OPACITY = 0.03;
+const INACTIVE_DUCT_OPACITY = 0.12;
 const ACTIVE_AMPULLA_OPACITY = 0.5;
-const INACTIVE_AMPULLA_OPACITY = 0.08;
+const INACTIVE_AMPULLA_OPACITY = 0.18;
 
 // Per-canal tint for the loaded real duct/ampulla meshes.
 const CANAL_TINT: Record<string, number> = { posterior: 0xe0507a, anterior: 0x4aa3e0, horizontal: 0x5fd17a };
@@ -153,7 +153,6 @@ export class CanalScene {
   private duct: THREE.Mesh;
   private readonly clotCluster: THREE.Group;
   private readonly cupulaMembrane: THREE.Mesh;
-  private crusMarker: THREE.Mesh;
   // "Detailed" style extras -- see buildDetailedAmpulla/buildDetailedCupulaDome/
   // buildHairCellTufts. Decorative/schematic (matching the iconography of clinical
   // illustrations, e.g. Fig. 3 in Parnes/Agrawal/Atlas 2003), not physics-driven, except
@@ -190,6 +189,20 @@ export class CanalScene {
    */
   private cupulaElevation = new THREE.Vector3();
   private style: CanalStyle = 'realistic';
+  // The gravity arrow (see constructor) -- kept as a field so setOrientation/
+  // setGravityMode can update its direction each frame.
+  private readonly gravityArrow: THREE.ArrowHelper;
+  private lastHeadQuat: Quat = [0, 0, 0, 1];
+  /**
+   * "world" (default): the canal group rotates with the head, and the arrow stays fixed
+   * pointing along +G_WORLD -- lets you watch the canal tumble relative to a gravity
+   * direction that never moves, which is what makes "why does the clot move that way"
+   * legible.
+   * "head": the canal group is frozen upright (never rotates), and the arrow instead
+   * rotates to show where gravity is CURRENTLY pointing relative to the head -- useful
+   * for reading gravity's position within a fixed, always-upright canal view.
+   */
+  private gravityMode: 'world' | 'head' = 'world';
   private selector: CanalSelector = {
     canal: 'posterior',
     side: 'right',
@@ -213,11 +226,6 @@ export class CanalScene {
       new THREE.MeshStandardMaterial({ color: 0x2ec4c6, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
     );
     this.canalGroup.add(this.cupulaMembrane);
-
-    // Common crus marker: a ring around the duct at the arc position where the clot is
-    // considered cleared into the utricle (relevant during Epley repositioning).
-    this.crusMarker = this.buildCrusMarker();
-    this.canalGroup.add(this.crusMarker);
 
     // "Detailed" style extras -- built here (once) and toggled visible/hidden per style
     // in applyStyle(), same pattern as the duct's material swap.
@@ -243,25 +251,20 @@ export class CanalScene {
     this.canalGroup.add(this.labyrinthAssembly);
     this.scene.add(this.canalGroup);
 
-    // Gravity arrow: fixed in world space (NOT added to canalGroup, so it does not
-    // rotate with the head) -- this is the whole point of the view, seeing the canal
-    // tumble relative to a gravity direction that never moves. Points along +G_WORLD,
-    // i.e. the direction gravity actually pulls things (down, HeadFrame -Z when upright)
-    // -- NOT a debris marker itself, just a fixed reference direction. Colored distinctly
-    // from the otoconia clot (which is also gold/amber) specifically because the two were
-    // getting visually confused -- this arrow was mistaken for the clot itself, which
-    // made its by-design fixed-in-world behavior read as a bug ("the clot doesn't follow
-    // the canal").
-    const gravityDir = toThreeVector3(normalize(G_WORLD));
-    const gravityArrow = new THREE.ArrowHelper(
-      gravityDir,
+    // Gravity arrow: always added to the SCENE (not canalGroup), so its transform is
+    // world space -- what it points at depends on gravityMode (see setGravityMode/
+    // setOrientation). Colored distinctly from the otoconia clot (which is also
+    // gold/amber) specifically because the two were getting visually confused -- this
+    // arrow was mistaken for the clot itself.
+    this.gravityArrow = new THREE.ArrowHelper(
+      toThreeVector3(normalize(G_WORLD)),
       new THREE.Vector3(0, 0, 0),
       CANAL_RADIUS_M * 3.2,
       0x7fa8d9,
       CANAL_RADIUS_M * 0.9,
       CANAL_RADIUS_M * 0.5
     );
-    this.scene.add(gravityArrow);
+    this.scene.add(this.gravityArrow);
 
     this.repositionForCanal();
     this.applyStyle();
@@ -425,14 +428,6 @@ export class CanalScene {
     return group;
   }
 
-  private buildCrusMarker(): THREE.Mesh {
-    const marker = new THREE.Mesh(
-      new THREE.TorusGeometry(DUCT_TUBE_RADIUS_SCENE * 1.35, DUCT_TUBE_RADIUS_SCENE * 0.16, 8, 24),
-      new THREE.MeshStandardMaterial({ color: 0xe08a2e })
-    );
-    return marker;
-  }
-
   /** Enlarged bulge at the ampulla (s=0) housing the cupula/hair cells -- "detailed" style only. */
   private buildAmpullaBulb(): THREE.Mesh {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(AMPULLA_RADIUS_SCENE, 20, 14), AMPULLA_MATERIAL);
@@ -505,15 +500,20 @@ export class CanalScene {
     this.cupulaElevation = this.computeCupulaElevation(this.selector.canal, this.selector.side);
     this.cupulaMembrane.position.copy(this.ductPosition(0)).add(this.cupulaElevation);
 
-    // Real-anatomy assembly: TRANSLATION ONLY (meshTranslation, no rotation -- the
-    // labyrinth stays in its one fixed real orientation always, see
-    // computeAssemblyRotation's doc comment) plus a mirror for the left ear --
-    // HeadFrame's left/right axis is Y, so the mirror flips Y (matching
-    // mirrorAcrossSagittal in src/physics/canal.ts), applied to the group's own scale
-    // since every mesh inside shares one consistent local frame (see
-    // EAR_ANATOMY/build.mjs) and can be mirrored together without drifting apart.
+    // Real-anatomy assembly: the loaded OBJ meshes are raw HeadFrame-axis vertices (see
+    // build.mjs), never rotated into Three's axis convention on load (loadInto only sets
+    // material) -- so the group itself must carry HEAD_FRAME_TO_THREE, the SAME rotation
+    // toThreeVector3 applies to every other point in this scene (duct centerline, cupula,
+    // clot, crus marker). Without it the whole assembly is left in HeadFrame's own axes
+    // (+Z = superior) instead of Three's (+Y = up), which reads as upside-down/misaligned
+    // relative to the markers riding the same coordinates. No PER-CANAL rotation beyond
+    // this shared one -- the labyrinth stays rigidly assembled (see meshTranslation's doc
+    // comment) -- plus a mirror for the left ear -- HeadFrame's left/right axis is Y, so
+    // the mirror flips Y (matching mirrorAcrossSagittal in src/physics/canal.ts), applied
+    // to the group's own scale since every mesh inside shares one consistent local frame
+    // (see EAR_ANATOMY/build.mjs) and can be mirrored together without drifting apart.
     this.labyrinthAssembly.position.copy(this.meshTranslation);
-    this.labyrinthAssembly.quaternion.identity();
+    this.labyrinthAssembly.quaternion.copy(HEAD_FRAME_TO_THREE);
     this.labyrinthAssembly.scale.y = this.selector.side === 'left' ? -1 : 1;
 
     // "Detailed" style extras: all positioned at the ampulla (s=0), oriented so their
@@ -529,27 +529,6 @@ export class CanalScene {
     // re-apply it AFTER the shared tangent alignment above, since setting .quaternion
     // directly overwrote it.
     this.detailedCupulaDome.rotateX(Math.PI / 2);
-
-    // Common crus marker: in "basic" style, ride the idealized circle like everything
-    // else there; in realistic/detailed, snap to the REAL common-crus landmark
-    // (EAR_ANATOMY.canals.posterior.commonCrusAnchor) instead of sampling the sparse
-    // 5-point centerline spline at S_COMMON_CRUS's arc-length fraction -- that fraction
-    // was calibrated against the idealized circle, not the real duct, and visibly
-    // drifted off the real duct mesh (a real landmark point is far more reliable here
-    // than extrapolating an under-constrained spline this far from its anchor points).
-    const posteriorAnatomy = EAR_ANATOMY.canals.posterior;
-    if (this.style !== 'basic' && posteriorAnatomy) {
-      const local = mirrorForSide(toThreeVector3(posteriorAnatomy.commonCrusAnchor), this.selector.side);
-      this.crusMarker.position.copy(local).add(this.meshTranslation);
-    } else {
-      this.crusMarker.position.copy(this.ductPosition(S_COMMON_CRUS));
-    }
-    const crusTangent = this.ductTangent(S_COMMON_CRUS);
-    this.crusMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), crusTangent);
-    // The crus commune is formed only where the anterior and posterior canals join --
-    // the horizontal canal's non-ampullary end opens directly into the utricle on its
-    // own, so this landmark is anatomically meaningless for it and should not be shown.
-    this.crusMarker.visible = this.selector.canal === 'posterior';
   }
 
   /** Switches which canal/ear is shown (called when the canal-type or affected-ear selector changes). */
@@ -638,9 +617,35 @@ export class CanalScene {
     }
   }
 
-  /** Rotates the whole canal (duct/cupula/clot/crus marker/backdrop) to match the current head orientation. */
+  /** Rotates the whole canal (duct/cupula/clot/backdrop) to match the current head orientation
+   * -- only in "world" gravity mode (see gravityMode's doc comment); in "head" mode the canal
+   * group stays frozen and the gravity arrow rotates instead (see applyGravityMode). */
   setOrientation(qHead: Quat): void {
-    this.canalGroup.quaternion.copy(toThreeQuaternion(qHead));
+    this.lastHeadQuat = qHead;
+    this.applyGravityMode();
+  }
+
+  /** Which reference frame to view the canal in -- see gravityMode's doc comment. */
+  setGravityMode(mode: 'world' | 'head'): void {
+    this.gravityMode = mode;
+    this.applyGravityMode();
+  }
+
+  private applyGravityMode(): void {
+    // "world" mode already shows gravity implicitly -- it's the one fixed thing in the
+    // view, and the canal visibly tumbling relative to it IS the gravity cue -- so the
+    // arrow itself is redundant there (and, since it never moves, easy to mistake for a
+    // static prop). Only "head" mode needs it drawn: there the canal itself is frozen, so
+    // the arrow is the only thing showing where gravity currently is.
+    if (this.gravityMode === 'world') {
+      this.canalGroup.quaternion.copy(toThreeQuaternion(this.lastHeadQuat));
+      this.gravityArrow.visible = false;
+    } else {
+      this.canalGroup.quaternion.identity();
+      const gHead = rotateVec(quatInvert(this.lastHeadQuat), G_WORLD);
+      this.gravityArrow.setDirection(toThreeVector3(normalize(gHead)));
+      this.gravityArrow.visible = true;
+    }
   }
 
   /**

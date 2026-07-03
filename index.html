@@ -37,14 +37,19 @@
               <option value="realistic" selected>Realistic</option>
               <option value="detailed">Detailed</option>
             </select>
+            <select id="gravity-mode-select" class="inline-toggle" title="World: gravity stays fixed, canal rotates with head. Head: canal stays fixed upright, gravity arrow rotates.">
+              <option value="world" selected>Gravity fixed</option>
+              <option value="head">Canal fixed</option>
+            </select>
           </h2>
           <canvas id="canal-canvas"></canvas>
           <div class="canal-legend">
-            <div><span class="swatch" style="background:#d7c9c9"></span>Duct</div>
+            <div><span class="swatch" style="background:#e0507a"></span>Posterior duct</div>
+            <div><span class="swatch" style="background:#4aa3e0"></span>Anterior duct</div>
+            <div><span class="swatch" style="background:#5fd17a"></span>Horizontal duct</div>
             <div><span class="swatch" style="background:#c9a227"></span><span id="legend-clot-label">Otoconia clot</span></div>
             <div><span class="swatch" style="background:#2ec4c6"></span>Cupula (ampulla, s=0)</div>
-            <div id="legend-common-crus"><span class="swatch" style="background:#e08a2e"></span>Common crus</div>
-            <div><span class="swatch" style="background:#7fa8d9"></span>Gravity (fixed)</div>
+            <div id="legend-gravity"><span class="swatch" style="background:#7fa8d9"></span>Gravity</div>
           </div>
         </div>
         <div class="view-panel">

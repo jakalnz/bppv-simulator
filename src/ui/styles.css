@@ -130,8 +130,10 @@ body {
   color: #9aa4b2;
   background: #20252d;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 4px;
 }
 
 .inline-toggle {
