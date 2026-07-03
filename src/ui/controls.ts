@@ -54,6 +54,13 @@ export class Controls {
   private readonly gyroCalibrateBtn: HTMLButtonElement;
   private readonly gyroStatus: HTMLSpanElement;
   private readonly debug: HTMLPreElement;
+  // Play/scrub/maneuver only make sense in "maneuver" mode (there's no scripted
+  // position to play/scrub through in mouse-drag/gyro mode); gyro on-off/calibrate
+  // only make sense in "gyro" mode -- each group is shown/hidden as a whole based on
+  // the current mode (see updateModeVisibility), rather than always showing every
+  // control regardless of relevance.
+  private readonly maneuverGroup: HTMLDivElement;
+  private readonly gyroGroup: HTMLDivElement;
   private scrubbing = false;
   private gyroEnabled = false;
 
@@ -160,7 +167,7 @@ export class Controls {
     modeSelect.value = initialMode;
     modeSelect.addEventListener('change', () => {
       const nextMode = modeSelect.value as PlaybackMode;
-      this.updateResetClotVisibility(nextMode);
+      this.updateModeVisibility(nextMode);
       callbacks.onModeChange(nextMode);
     });
 
@@ -184,33 +191,44 @@ export class Controls {
     this.debug = document.createElement('pre');
     this.debug.className = 'debug-readout';
 
-    const transportGroup = document.createElement('div');
-    transportGroup.className = 'control-group';
-    transportGroup.append(this.playBtn, resetBtn, this.resetClotBtn, this.scrub, this.label);
+    // Mode picker + both reset buttons: always relevant regardless of which mode is
+    // active, so always visible/on their own line -- unlike the maneuver/gyro groups
+    // below, which only make sense in ONE specific mode each.
+    const alwaysGroup = document.createElement('div');
+    alwaysGroup.className = 'control-group';
+    alwaysGroup.append(modeSelect, resetBtn, this.resetClotBtn);
 
-    const modeGroup = document.createElement('div');
-    modeGroup.className = 'control-group';
-    modeGroup.append(modeSelect, this.gyroToggleBtn, this.gyroCalibrateBtn, this.gyroStatus);
+    // Play/scrub/maneuver-select: only meaningful in "maneuver" mode (there's no
+    // scripted position to play or scrub through otherwise) -- grouped on one line so
+    // they read as a single "maneuver playback" unit, and shown/hidden as a whole (see
+    // updateModeVisibility) rather than leaving irrelevant controls visible in the
+    // other two modes.
+    this.maneuverGroup = document.createElement('div');
+    this.maneuverGroup.className = 'control-group';
+    this.maneuverGroup.append(this.maneuverSelect, this.playBtn, this.scrub, this.label);
 
-    // "Reset clot" only makes sense in mouse-drag/gyro mode -- in scripted-maneuver mode
-    // "Reset" already rewinds to the start (which also clears the clot physics), making
-    // a separate physics-only reset redundant clutter there.
-    this.updateResetClotVisibility(initialMode);
+    // Gyroscope on/off + calibrate: only meaningful in "gyro" mode.
+    this.gyroGroup = document.createElement('div');
+    this.gyroGroup.className = 'control-group';
+    this.gyroGroup.append(this.gyroToggleBtn, this.gyroCalibrateBtn, this.gyroStatus);
+
+    this.updateModeVisibility(initialMode);
 
     container.append(
       sideSelect,
       canalSelect,
       pathologySelect,
       debrisSideSelect,
-      this.maneuverSelect,
-      transportGroup,
-      modeGroup,
+      alwaysGroup,
+      this.maneuverGroup,
+      this.gyroGroup,
       this.debug
     );
   }
 
-  private updateResetClotVisibility(mode: PlaybackMode): void {
-    this.resetClotBtn.style.display = mode === 'maneuver' ? 'none' : '';
+  private updateModeVisibility(mode: PlaybackMode): void {
+    this.maneuverGroup.style.display = mode === 'maneuver' ? '' : 'none';
+    this.gyroGroup.style.display = mode === 'gyro' ? '' : 'none';
   }
 
   private updateGyroToggleLabel(): void {
