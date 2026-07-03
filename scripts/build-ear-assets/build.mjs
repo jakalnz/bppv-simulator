@@ -244,6 +244,18 @@ for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece, bulgePiece }] of Obje
 
   const connectorMesh = loadMeshHead(`ls_Hsapiens_${vtkPrefix}_Cup_Ut.vtk`, ASSEMBLY_ANCHOR);
   writeObj(join(OBJ_OUT_DIR, `${canalName}-ampulla-utricle-wall.obj`), connectorMesh.points, connectorMesh.indices);
+  // This membrane IS the anatomical "short arm" -- the direct passage between the
+  // ampulla and the utricle, distinct from the main duct loop's "long arm" (which goes
+  // the other way around, through the common crus). Its own centroid (already in the
+  // shared assembly frame, since loadMeshHead recenters on ASSEMBLY_ANCHOR same as
+  // everything else here) gives a real middle waypoint for that passage -- used, with
+  // the ampulla and utricle-centroid (local origin) endpoints, as a short real
+  // 2-segment path for short-arm otoconia re-entry physics (see
+  // src/physics/shortArmReentry.ts). Not a mesh centerline extraction (no fcsv
+  // landmark stations exist for this small connecting piece the way they do for the
+  // main duct) -- a single interior waypoint is a much simpler, still real-anatomy-
+  // grounded approximation of the passage's shape.
+  const connectorCentroid = mean(pointsToTriplets(connectorMesh.points));
 
   // Ampulla bulge (Ap/Aa/Al): the wider bony dilation the duct widens into before
   // reaching the Cup_Wall/crista -- without this piece there's a visible gap between the
@@ -272,6 +284,15 @@ for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece, bulgePiece }] of Obje
     // by physics -- see S_COMMON_CRUS in src/physics/canal.ts); still exported for all
     // canals for simplicity, scene code only reads it for 'posterior'.
     commonCrusAnchor: sub(commonCrusAnchorReal, ASSEMBLY_ANCHOR),
+    // Short-arm re-entry path waypoint + real path length (ampulla -> centroid ->
+    // utricle-centroid-at-origin), see connectorCentroid's comment above. Only
+    // 'posterior' is clinically described by the literature this models (Yang & Yang
+    // 2025 -- see src/physics/params.ts's K_MOBILITY_PHYSICAL doc comment for the
+    // citation) and only 'posterior' is read for this by the physics layer, but
+    // exported for all canals for consistency with the other fields here.
+    shortArmWaypoint: connectorCentroid,
+    shortArmLengthM:
+      norm(sub(sub(ampullaAnchorReal, ASSEMBLY_ANCHOR), connectorCentroid)) + norm(connectorCentroid),
     ductMesh: `/models/ear-anatomy/${canalName}-duct.obj`,
     ampullaMesh: `/models/ear-anatomy/${canalName}-ampulla.obj`,
     connectorMesh: `/models/ear-anatomy/${canalName}-ampulla-utricle-wall.obj`,

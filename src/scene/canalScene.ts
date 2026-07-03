@@ -44,6 +44,10 @@ interface EarAnatomyCanal {
   planeNormal: [number, number, number];
   /** Real common-crus landmark (only meaningful for 'posterior'), same assembly frame. */
   commonCrusAnchor: [number, number, number];
+  /** Interior waypoint through the ampulla<->utricle connector membrane -- the real
+   * "short arm" path physics/shortArmReentry.ts drives short-arm re-entry along (only
+   * meaningful for 'posterior', see that module's doc comment). Same assembly frame. */
+  shortArmWaypoint: [number, number, number];
   ductMesh: string;
   ampullaMesh: string;
   connectorMesh: string;
@@ -179,6 +183,12 @@ export class CanalScene {
   // at the duct's own far end, which is what the duct-only curve above does by itself.
   // See ductPosition's doc comment for how s selects between the two curves.
   private readonly realExtensionCurves: Record<string, THREE.CatmullRomCurve3> = {};
+  // "Short arm" re-entry path (utricle -> connector waypoint -> ampulla), for the
+  // clot marker while physics/shortArmReentry.ts's short-arm progress is nonzero --
+  // see setClotShortArmProgress. Only 'posterior' has a real short-arm landmark
+  // (matches physics/shortArmReentry.ts's own posterior-only scope), but built for
+  // all canals here since EAR_ANATOMY exports the field uniformly.
+  private readonly shortArmCurves: Record<string, THREE.CatmullRomCurve3> = {};
   // Per-canal duct/ampulla materials -- opacity toggled between active/inactive in
   // updateActiveCanalHighlight so the currently selected canal's real duct is
   // unambiguous, see loadRealAnatomy's doc comment.
@@ -271,6 +281,17 @@ export class CanalScene {
           ? [ductEnd, toThreeVector3(anatomy.commonCrusAnchor), utricleCenter]
           : [ductEnd, utricleCenter];
       this.realExtensionCurves[canal] = new THREE.CatmullRomCurve3(waypoints);
+
+      // Same utricleCenter/ampulla endpoints as above, but via the SHORT path (the
+      // connector membrane's own waypoint) instead of the long duct -- parametrized
+      // utricle(u=0) -> ampulla(u=1) to match physics/shortArmReentry.ts's own
+      // progress convention directly (no flipping needed at the call site).
+      const ampullaPoint = toThreeVector3(anatomy.ampullaAnchor);
+      this.shortArmCurves[canal] = new THREE.CatmullRomCurve3([
+        utricleCenter,
+        toThreeVector3(anatomy.shortArmWaypoint),
+        ampullaPoint,
+      ]);
     }
 
     this.canalGroup.add(this.labyrinthAssembly);
@@ -734,6 +755,28 @@ export class CanalScene {
     // elongated conglomerate mass in the duct's own direction, not a fixed world-aligned
     // blob (matches the clinical illustrations this cluster is based on -- see
     // PARTICLE_OFFSETS).
+    this.clotCluster.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tangent);
+  }
+
+  /**
+   * Positions the clot along the short-arm re-entry path (utricle -> connector
+   * waypoint -> ampulla) instead of the main duct -- called instead of
+   * setClotArcPosition while physics/shortArmReentry.ts's progress is nonzero (see
+   * main.ts). "basic" style has no real utricle/ampulla points to route through (the
+   * idealized circle has no utricle concept at all), so it just pins at the ampulla
+   * (s=0 on that circle) for the whole short-arm phase -- a reasonable simplification
+   * given "basic" doesn't otherwise distinguish real anatomy from the idealized duct.
+   */
+  setClotShortArmProgress(progress: number): void {
+    const curve = this.style !== 'basic' ? this.shortArmCurves[this.selector.canal] : undefined;
+    if (!curve) {
+      this.setClotArcPosition(0);
+      return;
+    }
+    const u = Math.max(0, Math.min(1, progress));
+    const position = mirrorForSide(curve.getPointAt(u), this.selector.side).add(this.meshTranslation);
+    const tangent = mirrorForSide(curve.getTangentAt(u), this.selector.side).normalize();
+    this.clotCluster.position.copy(position);
     this.clotCluster.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tangent);
   }
 

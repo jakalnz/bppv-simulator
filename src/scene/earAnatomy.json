@@ -59,6 +59,12 @@
         0.0006818627670697446,
         0.0012104132424125542
       ],
+      "shortArmWaypoint": [
+        -0.002861894493281551,
+        0.0007454343550224704,
+        -0.0025879473776205795
+      ],
+      "shortArmLengthM": 0.005878754014482797,
       "ductMesh": "/models/ear-anatomy/posterior-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/posterior-ampulla.obj",
       "connectorMesh": "/models/ear-anatomy/posterior-ampulla-utricle-wall.obj",
@@ -119,6 +125,12 @@
         0.0006818627670697446,
         0.0012104132424125542
       ],
+      "shortArmWaypoint": [
+        0.001254888818451635,
+        -0.0014238036149635729,
+        0.0017073018206624178
+      ],
+      "shortArmLengthM": 0.005147759577483427,
       "ductMesh": "/models/ear-anatomy/anterior-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/anterior-ampulla.obj",
       "connectorMesh": "/models/ear-anatomy/anterior-ampulla-utricle-wall.obj",
@@ -179,6 +191,12 @@
         0.0006818627670697446,
         0.0012104132424125542
       ],
+      "shortArmWaypoint": [
+        0.0009757495436133468,
+        -0.002568197996879462,
+        0.0006197499319569033
+      ],
+      "shortArmLengthM": 0.00411304596915405,
       "ductMesh": "/models/ear-anatomy/horizontal-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/horizontal-ampulla.obj",
       "connectorMesh": "/models/ear-anatomy/horizontal-ampulla-utricle-wall.obj",

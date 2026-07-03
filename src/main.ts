@@ -1,11 +1,13 @@
 import { Quat, quatAngleBetween, quatInvert, rotateVec } from './physics/types';
-import { G_WORLD, LATENCY_SECONDS } from './physics/params';
+import { G_WORLD, LATENCY_SECONDS, ADHERENCE_WINDOW_SECONDS } from './physics/params';
 import { CanalithState, initialCanalithState, updateCanalith, isCleared } from './physics/canalith';
+import { ShortArmPath, ShortArmState, initialShortArmState, updateShortArm } from './physics/shortArmReentry';
 import { updateCupula, relaxOnly } from './physics/cupula';
 import { cupulolithiasisDrive } from './physics/cupulolithiasis';
 import { CupulaReleaseDetector, initialReleaseDetector, updateReleaseDetector } from './physics/cupulaRelease';
 import { updateVor, initialVorState, VorState, decomposeEyeMovement } from './physics/vor';
 import { CanalSelector, CanalType, Pathology, S_COMMON_CRUS } from './physics/canal';
+import earAnatomyData from './scene/earAnatomy.json';
 
 import { Maneuver } from './maneuvers/types';
 import { ManeuverPlayer } from './maneuvers/playback';
@@ -38,30 +40,38 @@ const canalScene = new CanalScene(canalCanvas);
 const headScene = new HeadScene(headCanvas);
 const vngTrace = new VngTrace(vngCanvas);
 
-// "Cleared into the utricle" toast -- shown once on the RISING EDGE of
-// canalithState.clearedIntoUtricle (see physics/canalith.ts's doc comment on that
-// field), not just whenever it happens to be true, so it reads as a one-off
-// notification of the moment of clearing rather than a persistent status label.
-const clearedToast = document.getElementById('canal-cleared-toast') as HTMLDivElement;
-let clearedToastHideTimer: ReturnType<typeof setTimeout> | undefined;
-function showClearedToast(): void {
-  clearedToast.hidden = false;
-  // Force a layout flush before adding the class -- otherwise the browser can coalesce
-  // the hidden->visible and opacity 0->1 changes into a single paint, skipping the
-  // fade-in transition entirely.
-  void clearedToast.offsetWidth;
-  clearedToast.classList.add('show');
-  clearTimeout(clearedToastHideTimer);
-  clearedToastHideTimer = setTimeout(() => {
-    clearedToast.classList.remove('show');
-    clearedToastHideTimer = setTimeout(() => (clearedToast.hidden = true), 300);
-  }, 3500);
+/**
+ * Small one-off notification toast (fade in, auto-hide after a few seconds) --
+ * factored out since there are now two: "cleared into the utricle" (good) and
+ * "re-entered the canal via the short arm" (bad), both fired once on a rising edge of
+ * their respective physics condition, not persistent status labels.
+ */
+function makeToast(elementId: string) {
+  const el = document.getElementById(elementId) as HTMLDivElement;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  return {
+    show(): void {
+      el.hidden = false;
+      // Force a layout flush before adding the class -- otherwise the browser can
+      // coalesce the hidden->visible and opacity 0->1 changes into a single paint,
+      // skipping the fade-in transition entirely.
+      void el.offsetWidth;
+      el.classList.add('show');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        el.classList.remove('show');
+        hideTimer = setTimeout(() => (el.hidden = true), 300);
+      }, 3500);
+    },
+    hideImmediately(): void {
+      clearTimeout(hideTimer);
+      el.classList.remove('show');
+      el.hidden = true;
+    },
+  };
 }
-function hideClearedToastImmediately(): void {
-  clearTimeout(clearedToastHideTimer);
-  clearedToast.classList.remove('show');
-  clearedToast.hidden = true;
-}
+const clearedToast = makeToast('canal-cleared-toast');
+const reenteredToast = makeToast('canal-reentered-toast');
 
 // Canal panel's own About pill -- cites the academic source for that specific model
 // (IE-Map). Its popover uses position:fixed (see .about-popover--inline), since the
@@ -231,12 +241,30 @@ const controls = new Controls(
   mode
 );
 
+// Real short-arm landmarks (posterior canal only -- see ShortArmPath's doc comment),
+// read directly from the same generated dataset canalScene.ts uses for rendering.
+const posteriorAnatomy = (
+  earAnatomyData as unknown as {
+    canals: Record<string, { ampullaAnchor: [number, number, number]; shortArmWaypoint: [number, number, number] }>;
+  }
+).canals.posterior;
+const SHORT_ARM_PATH: ShortArmPath = {
+  ampulla: posteriorAnatomy.ampullaAnchor,
+  waypoint: posteriorAnatomy.shortArmWaypoint,
+  utricleCenter: [0, 0, 0],
+};
+
 // Physics state.
 let canalithState: CanalithState = initialCanalithState();
 let beta = 0; // cupula deflection
 let vor: VorState = initialVorState();
 let lastQHead: Quat = maneuverPlayer.currentOrientation();
 let simulationTimeSeconds = 0;
+// Short-arm re-entry (see physics/shortArmReentry.ts) -- only evaluated for the
+// posterior canal while canalithState.clearedIntoUtricle is true and before
+// secondsSinceSettled exceeds ADHERENCE_WINDOW_SECONDS (see stepPhysicsOnce).
+let shortArmState: ShortArmState = initialShortArmState();
+let secondsSinceSettled = 0;
 // Angular-velocity tracking for the cupula-release mechanic (see physics/cupulaRelease.ts):
 // a rapid head movement followed by an abrupt stop mechanically knocks cupula-adherent
 // debris loose, converting cupulolithiasis into free-floating canalithiasis for the rest
@@ -248,6 +276,8 @@ let cupulaDebrisReleased = false;
 
 function resetPhysics(): void {
   canalithState = initialCanalithState();
+  shortArmState = initialShortArmState();
+  secondsSinceSettled = 0;
   beta = 0;
   vor = initialVorState();
   simulationTimeSeconds = 0;
@@ -260,7 +290,8 @@ function resetPhysics(): void {
   releaseDetector = initialReleaseDetector();
   cupulaDebrisReleased = false;
   vngTrace.reset();
-  hideClearedToastImmediately();
+  clearedToast.hideImmediately();
+  reenteredToast.hideImmediately();
 }
 
 const FIXED_DT = 1 / 120;
@@ -304,7 +335,31 @@ function stepPhysicsOnce(dt: number): void {
     // is now free-floating -- same physics either way.
     const wasSettledInUtricle = canalithState.clearedIntoUtricle;
     canalithState = updateCanalith(canalithState, gHead, dt, selector);
-    if (canalithState.clearedIntoUtricle && !wasSettledInUtricle) showClearedToast();
+    if (canalithState.clearedIntoUtricle && !wasSettledInUtricle) {
+      clearedToast.show();
+      shortArmState = initialShortArmState();
+      secondsSinceSettled = 0;
+    }
+    // Short-arm re-entry (see physics/shortArmReentry.ts): only the posterior canal
+    // has a real short-arm landmark modeled (SHORT_ARM_PATH), and only while settled
+    // debris hasn't yet adhered to the utricular macula (ADHERENCE_WINDOW_SECONDS --
+    // see that constant's doc comment). Past that window, skip evaluating it entirely
+    // -- the debris is considered permanently safe, matching clearedIntoUtricle's own
+    // "durable once settled" behavior.
+    if (canalithState.clearedIntoUtricle && selector.canal === 'posterior' && secondsSinceSettled < ADHERENCE_WINDOW_SECONDS) {
+      secondsSinceSettled += dt;
+      shortArmState = updateShortArm(shortArmState, gHead, dt, SHORT_ARM_PATH, selector.side);
+      if (shortArmState.progress >= 1) {
+        // Genuine re-entry via the short arm -- resume ordinary long-arm canalithiasis
+        // physics from the ampulla (s=0), same convention as a fresh
+        // cupulolithiasis-release above, and reset the short-arm tracking so it can
+        // fire again if this canal clears a second time later in the session.
+        canalithState = initialCanalithState();
+        shortArmState = initialShortArmState();
+        secondsSinceSettled = 0;
+        reenteredToast.show();
+      }
+    }
     const cleared = isCleared(canalithState.s);
     // The cupula is driven by the clot's ACTUAL (latency-gated, lagged) velocity, not
     // the instantaneous target -- so during the latency period, before the clot is
@@ -348,7 +403,13 @@ function renderFrame(): void {
   // animation.
   const useAttachedCupulaPhysics = selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased;
   canalScene.setDebrisAttached(useAttachedCupulaPhysics);
-  canalScene.setClotArcPosition(useAttachedCupulaPhysics ? 0 : canalithState.s);
+  const inShortArmReentry =
+    canalithState.clearedIntoUtricle && selector.canal === 'posterior' && shortArmState.progress > 0;
+  if (inShortArmReentry) {
+    canalScene.setClotShortArmProgress(shortArmState.progress);
+  } else {
+    canalScene.setClotArcPosition(useAttachedCupulaPhysics ? 0 : canalithState.s);
+  }
   // Legend reflects the CURRENT attachment state, not just the selected pathology --
   // updated every frame (cheap textContent set) so it flips the moment release happens,
   // same as the debug readout below.
@@ -378,6 +439,10 @@ function renderFrame(): void {
         canalithState.released ? 'released' : `latency ${canalithState.latencyTimer.toFixed(1)}/${LATENCY_SECONDS}s`
       })  cleared past crus=${isCleared(canalithState.s)} (crus @ ${S_COMMON_CRUS})${
         selector.pathology === 'cupulolithiasis' ? '  [RELEASED FROM CUPULA]' : ''
+      }${
+        canalithState.clearedIntoUtricle && selector.canal === 'posterior'
+          ? `  shortArm=${shortArmState.progress.toFixed(2)} (adherence ${Math.min(secondsSinceSettled, ADHERENCE_WINDOW_SECONDS).toFixed(1)}/${ADHERENCE_WINDOW_SECONDS}s)`
+          : ''
       }`;
   controls.setDebugReadout(
     `${pathologyStatus}  beta=${beta.toFixed(3)}  eye=${vor.eyeAngle.toFixed(

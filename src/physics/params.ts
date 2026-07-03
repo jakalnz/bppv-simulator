@@ -65,6 +65,49 @@ const TEACHING_MODE_TIME_SCALE = 19;
 export const K_MOBILITY = K_MOBILITY_PHYSICAL * TEACHING_MODE_TIME_SCALE;
 
 /**
+ * Short-arm re-entry (see physics/shortArmReentry.ts): a real, much shorter,
+ * anatomically distinct passage directly between the utricle and the ampulla
+ * (~5.9mm total per this app's own posterior connector-mesh centroid, see
+ * scene/earAnatomy.json's shortArmLengthM / scripts/build-ear-assets/build.mjs) --
+ * separate from the main duct's "long arm" this app's s/S_MAX already models. Yang &
+ * Yang 2025 (see K_MOBILITY_PHYSICAL's doc comment for the citation) describes
+ * utricle-settled otoconia able to "slowly roll" back into this short arm if the
+ * final maneuver position isn't tilted nose-down enough, re-triggering symptoms.
+ *
+ * Anchored to the same REFERENCE_SETTLING_SPEED_M_S baseline as K_MOBILITY_PHYSICAL,
+ * but with an INDEPENDENTLY chosen (smaller) teaching-pacing scale -- deliberately
+ * NOT reusing TEACHING_MODE_TIME_SCALE, since the paper's own wording ("slowly roll")
+ * calls for this to read as visibly more gradual than the main paroxysm within this
+ * app's compressed timeline, not equally fast.
+ */
+const SHORT_ARM_LENGTH_M_APPROX = 0.0059;
+const SHORT_ARM_TEACHING_SCALE = 6;
+export const K_SHORT_ARM_MOBILITY =
+  (REFERENCE_SETTLING_SPEED_M_S / (SHORT_ARM_LENGTH_M_APPROX * 9.81)) * SHORT_ARM_TEACHING_SCALE;
+
+/** Same role as LATENCY_SECONDS, for the short-arm path -- picked shorter since the
+ * short-arm's own transit is already brief once moving; an equally long latency would
+ * read as "nothing happens" rather than "slowly rolls in". Tuned for legible pacing,
+ * not derived. */
+export const SHORT_ARM_LATENCY_SECONDS = 1.0;
+
+/** Same role as CLOT_INERTIA_TAU, for the short-arm path. Tuned for legible pacing, not derived. */
+export const SHORT_ARM_INERTIA_TAU = 1.2;
+
+/**
+ * How long (seconds, teaching-mode pacing) after settling in the utricle before
+ * otoconia are considered adhered to the utricular macula and short-arm re-entry
+ * stops being possible at all. Yang & Yang 2025's own clinical protocol recommends
+ * holding the final maneuver position "for at least 5 min to enhance otoconial
+ * adherence... thus reducing the likelihood of recanalization" (Section 4.4) --
+ * adherence is real, but takes real clinical minutes, not milliseconds. Compressed
+ * for the same teaching-demo legibility reason as every timing constant in this file;
+ * roughly the same order of compression as TEACHING_MODE_TIME_SCALE (300s / 19 ≈ 16s)
+ * rounded to a plain number, not independently derived.
+ */
+export const ADHERENCE_WINDOW_SECONDS = 16;
+
+/**
  * Seconds of sustained one-directional drive required before the clot is "released" to
  * start moving at all. Stands in for the otoconial debris overcoming resting
  * adhesion/cohesion before it breaks free -- the free-particle Stokes-drag
