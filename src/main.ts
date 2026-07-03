@@ -38,6 +38,31 @@ const canalScene = new CanalScene(canalCanvas);
 const headScene = new HeadScene(headCanvas);
 const vngTrace = new VngTrace(vngCanvas);
 
+// "Cleared into the utricle" toast -- shown once on the RISING EDGE of
+// canalithState.clearedIntoUtricle (see physics/canalith.ts's doc comment on that
+// field), not just whenever it happens to be true, so it reads as a one-off
+// notification of the moment of clearing rather than a persistent status label.
+const clearedToast = document.getElementById('canal-cleared-toast') as HTMLDivElement;
+let clearedToastHideTimer: ReturnType<typeof setTimeout> | undefined;
+function showClearedToast(): void {
+  clearedToast.hidden = false;
+  // Force a layout flush before adding the class -- otherwise the browser can coalesce
+  // the hidden->visible and opacity 0->1 changes into a single paint, skipping the
+  // fade-in transition entirely.
+  void clearedToast.offsetWidth;
+  clearedToast.classList.add('show');
+  clearTimeout(clearedToastHideTimer);
+  clearedToastHideTimer = setTimeout(() => {
+    clearedToast.classList.remove('show');
+    clearedToastHideTimer = setTimeout(() => (clearedToast.hidden = true), 300);
+  }, 3500);
+}
+function hideClearedToastImmediately(): void {
+  clearTimeout(clearedToastHideTimer);
+  clearedToast.classList.remove('show');
+  clearedToast.hidden = true;
+}
+
 // Canal panel's own About pill -- cites the academic source for that specific model
 // (IE-Map). Its popover uses position:fixed (see .about-popover--inline), since the
 // canal panel has overflow:hidden for the canvas's rounded corners, which would clip a
@@ -235,6 +260,7 @@ function resetPhysics(): void {
   releaseDetector = initialReleaseDetector();
   cupulaDebrisReleased = false;
   vngTrace.reset();
+  hideClearedToastImmediately();
 }
 
 const FIXED_DT = 1 / 120;
@@ -276,7 +302,9 @@ function stepPhysicsOnce(dt: number): void {
   } else {
     // Canalithiasis, OR cupulolithiasis debris that has been mechanically released and
     // is now free-floating -- same physics either way.
+    const wasSettledInUtricle = canalithState.clearedIntoUtricle;
     canalithState = updateCanalith(canalithState, gHead, dt, selector);
+    if (canalithState.clearedIntoUtricle && !wasSettledInUtricle) showClearedToast();
     const cleared = isCleared(canalithState.s);
     // The cupula is driven by the clot's ACTUAL (latency-gated, lagged) velocity, not
     // the instantaneous target -- so during the latency period, before the clot is

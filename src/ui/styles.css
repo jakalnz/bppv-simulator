@@ -209,6 +209,46 @@ body {
   min-height: 0;
 }
 
+/* Positioning context for the "cleared" toast (see .cleared-toast) -- separate from
+ * .view-panel--canal itself so the toast can anchor to the CANVAS's own top edge
+ * regardless of the header's height (1 or 2 lines depending on wrap/breakpoint). */
+.canal-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canal-canvas-wrap canvas {
+  flex: none;
+}
+
+/* Celebratory banner shown once when the otoconia clot settles in the utricle (see
+ * main.ts's clearedIntoUtricle rising-edge check) -- fades in/out rather than just
+ * appearing/disappearing so it reads as a transient toast, not a persistent label. */
+.cleared-toast {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid #3f9d5f;
+  color: #a8e8bb;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 5;
+}
+
+.cleared-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 /* A compact wrapping row, laid out in normal flow BELOW the canvas (not an absolute
  * overlay on top of it) -- overlaying was hiding the model itself on the canal panel,
  * which is the smaller side panel and doesn't have room to spare under a floating box. */
