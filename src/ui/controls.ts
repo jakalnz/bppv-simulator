@@ -38,7 +38,8 @@ export interface ControlsCallbacks {
   /** fraction is normalized 0..1 of the maneuver's total duration. */
   onScrub: (fraction: number) => void;
   onModeChange: (mode: PlaybackMode) => void;
-  onEnableGyro: () => void;
+  /** enable=true: request permission and start listening; enable=false: stop listening. */
+  onToggleGyro: (enable: boolean) => void;
   onCalibrateGyro: () => void;
 }
 
@@ -46,13 +47,15 @@ export interface ControlsCallbacks {
 export class Controls {
   private readonly maneuverSelect: HTMLSelectElement;
   private readonly playBtn: HTMLButtonElement;
+  private readonly resetClotBtn: HTMLButtonElement;
   private readonly scrub: HTMLInputElement;
   private readonly label: HTMLSpanElement;
-  private readonly gyroEnableBtn: HTMLButtonElement;
+  private readonly gyroToggleBtn: HTMLButtonElement;
   private readonly gyroCalibrateBtn: HTMLButtonElement;
   private readonly gyroStatus: HTMLSpanElement;
   private readonly debug: HTMLPreElement;
   private scrubbing = false;
+  private gyroEnabled = false;
 
   constructor(container: HTMLElement, callbacks: ControlsCallbacks, initialMode: PlaybackMode = 'maneuver') {
     const canalSelect = document.createElement('select');
@@ -130,10 +133,10 @@ export class Controls {
       callbacks.onReset();
     });
 
-    const resetClotBtn = document.createElement('button');
-    resetClotBtn.textContent = 'Reset clot';
-    resetClotBtn.title = 'Reset the otoconia clot / cupula physics without changing head position';
-    resetClotBtn.addEventListener('click', () => callbacks.onResetClot());
+    this.resetClotBtn = document.createElement('button');
+    this.resetClotBtn.textContent = 'Reset clot';
+    this.resetClotBtn.title = 'Reset the otoconia clot / cupula physics without changing head position';
+    this.resetClotBtn.addEventListener('click', () => callbacks.onResetClot());
 
     this.scrub = document.createElement('input');
     this.scrub.type = 'range';
@@ -155,14 +158,24 @@ export class Controls {
       <option value="gyro">Gyroscope (phone)</option>
     `;
     modeSelect.value = initialMode;
-    modeSelect.addEventListener('change', () => callbacks.onModeChange(modeSelect.value as PlaybackMode));
+    modeSelect.addEventListener('change', () => {
+      const nextMode = modeSelect.value as PlaybackMode;
+      this.updateResetClotVisibility(nextMode);
+      callbacks.onModeChange(nextMode);
+    });
 
-    this.gyroEnableBtn = document.createElement('button');
-    this.gyroEnableBtn.textContent = 'Enable motion';
-    this.gyroEnableBtn.addEventListener('click', () => callbacks.onEnableGyro());
+    // Toggle button (not a one-shot "Enable motion" action) so its own label/indicator
+    // always reflects whether the gyroscope is actually listening -- tapping it again
+    // turns it back off (see onToggleGyro/gyroSource.stop in main.ts).
+    this.gyroToggleBtn = document.createElement('button');
+    this.gyroToggleBtn.addEventListener('click', () => {
+      this.setGyroEnabled(!this.gyroEnabled);
+      callbacks.onToggleGyro(this.gyroEnabled);
+    });
+    this.updateGyroToggleLabel();
 
     this.gyroCalibrateBtn = document.createElement('button');
-    this.gyroCalibrateBtn.textContent = 'Zero';
+    this.gyroCalibrateBtn.textContent = 'Calibrate gyro';
     this.gyroCalibrateBtn.title = 'Hold the phone naturally, then tap to set this as head-neutral';
     this.gyroCalibrateBtn.addEventListener('click', () => callbacks.onCalibrateGyro());
 
@@ -173,11 +186,16 @@ export class Controls {
 
     const transportGroup = document.createElement('div');
     transportGroup.className = 'control-group';
-    transportGroup.append(this.playBtn, resetBtn, resetClotBtn, this.scrub, this.label);
+    transportGroup.append(this.playBtn, resetBtn, this.resetClotBtn, this.scrub, this.label);
 
     const modeGroup = document.createElement('div');
     modeGroup.className = 'control-group';
-    modeGroup.append(modeSelect, this.gyroEnableBtn, this.gyroCalibrateBtn, this.gyroStatus);
+    modeGroup.append(modeSelect, this.gyroToggleBtn, this.gyroCalibrateBtn, this.gyroStatus);
+
+    // "Reset clot" only makes sense in mouse-drag/gyro mode -- in scripted-maneuver mode
+    // "Reset" already rewinds to the start (which also clears the clot physics), making
+    // a separate physics-only reset redundant clutter there.
+    this.updateResetClotVisibility(initialMode);
 
     container.append(
       sideSelect,
@@ -189,6 +207,27 @@ export class Controls {
       modeGroup,
       this.debug
     );
+  }
+
+  private updateResetClotVisibility(mode: PlaybackMode): void {
+    this.resetClotBtn.style.display = mode === 'maneuver' ? 'none' : '';
+  }
+
+  private updateGyroToggleLabel(): void {
+    // A small filled/hollow dot as the "indicator" (rather than just swapping text)
+    // makes the on/off state legible at a glance rather than requiring the user to
+    // actually read the label.
+    this.gyroToggleBtn.innerHTML = `<span class="status-dot ${this.gyroEnabled ? 'on' : 'off'}"></span>Gyroscope: ${
+      this.gyroEnabled ? 'On' : 'Off'
+    }`;
+  }
+
+  /** Sets the toggle's displayed state without re-firing onToggleGyro -- used when main.ts
+   * needs to reflect an outcome the user didn't directly cause (e.g. permission denied
+   * reverting an optimistic "On" back to "Off"). */
+  setGyroEnabled(enabled: boolean): void {
+    this.gyroEnabled = enabled;
+    this.updateGyroToggleLabel();
   }
 
   setProgress(fraction: number, label: string): void {

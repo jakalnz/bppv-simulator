@@ -164,12 +164,21 @@ const controls = new Controls(
       mode = next;
       if (mode === 'mouse') mouseDragSource.reset();
     },
-    onEnableGyro: () => {
+    onToggleGyro: (enable: boolean) => {
+      if (!enable) {
+        gyroSource.stop();
+        controls.setGyroStatus('');
+        return;
+      }
       requestOrientationPermission().then((granted) => {
         if (granted) {
           gyroSource.start();
-          controls.setGyroStatus('Motion enabled — tap Zero while holding the phone naturally');
+          controls.setGyroStatus('Gyroscope on — tap Calibrate gyro while holding the phone naturally');
         } else {
+          // Revert the toggle's own displayed state -- the click already flipped it to
+          // "On" optimistically, but permission was denied, so nothing is actually
+          // listening.
+          controls.setGyroEnabled(false);
           controls.setGyroStatus('Motion permission denied');
         }
       });
