@@ -2,13 +2,29 @@
   box-sizing: border-box;
 }
 
+:root {
+  --bg: #0f1116;
+  --panel: #1a1d24;
+  --panel-header: #20232b;
+  --border: #2c3038;
+  --border-soft: #333844;
+  --text: #e8e8ec;
+  --text-dim: #9aa4b2;
+  --text-faint: #6f7889;
+  --accent: #5b9bd5;
+  --accent-hover: #6faee2;
+  --radius: 10px;
+  --radius-sm: 7px;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
-  background: #12151a;
-  color: #e8e8ec;
+  background: var(--bg);
+  color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
@@ -16,45 +32,52 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  padding: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  gap: 8px;
+  overflow: hidden;
 }
 
 .vng-panel {
-  flex: 0 0 170px;
-  background: #1b1f26;
-  border-bottom: 1px solid #2a2f38;
+  flex: 0 0 150px;
+  background: var(--panel);
+  border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  margin: 8px 8px 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .vng-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  background: #20252d;
+  padding: 7px 12px;
+  background: var(--panel-header);
+  border-bottom: 1px solid var(--border);
 }
 
 .vng-header h2 {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: #9aa4b2;
+  color: var(--text-dim);
+  letter-spacing: 0.01em;
 }
 
 .vng-legend {
   display: flex;
   gap: 12px;
   font-size: 0.72rem;
-  color: #d4d9e0;
+  color: var(--text-dim);
 }
 
 .vng-legend .swatch {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
   margin-right: 5px;
 }
@@ -68,86 +91,115 @@ body {
 
 .about-pill {
   position: absolute;
-  top: 16px;
+  top: calc(16px + env(safe-area-inset-top));
   right: 16px;
   z-index: 10;
-  background: rgba(42, 47, 56, 0.85);
-  color: #d4d9e0;
-  border: 1px solid #3a4048;
+  background: rgba(32, 35, 43, 0.9);
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
   border-radius: 999px;
   padding: 5px 14px;
   font-size: 0.72rem;
   cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .about-pill:hover {
-  background: #343b45;
+  background: var(--panel-header);
+  color: var(--text);
 }
 
 .about-popover {
   position: absolute;
-  top: 46px;
+  top: calc(46px + env(safe-area-inset-top));
   right: 16px;
   z-index: 10;
-  background: rgba(18, 21, 26, 0.95);
-  border: 1px solid #3a4048;
-  border-radius: 8px;
+  background: rgba(20, 22, 28, 0.97);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-size: 0.7rem;
   line-height: 1.5;
-  color: #8b93a0;
+  color: var(--text-faint);
   max-width: 220px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .about-popover a {
-  color: #8b93a0;
+  color: var(--text-dim);
 }
 
+/*
+ * Desktop layout: Eye is the primary diagnostic view, given the most space; Canal and
+ * Head are secondary reference views, stacked in a narrower side column (canal over
+ * head) rather than three equal-width columns -- the eye is what you actually read
+ * nystagmus off, the other two are context.
+ */
 #views {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: 1fr;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas:
+    'eye canal'
+    'eye head';
   gap: 8px;
-  padding: 8px;
   min-height: 0;
+}
+
+.view-panel--eye {
+  grid-area: eye;
+}
+.view-panel--canal {
+  grid-area: canal;
+}
+.view-panel--head {
+  grid-area: head;
 }
 
 .view-panel {
   position: relative;
-  background: #1b1f26;
-  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  min-height: 0;
 }
 
 .view-panel h2 {
   margin: 0;
   padding: 6px 10px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: #9aa4b2;
-  background: #20252d;
+  color: var(--text-dim);
+  background: var(--panel-header);
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+  letter-spacing: 0.01em;
 }
 
 .inline-toggle {
-  background: #2a2f38;
-  color: #d4d9e0;
-  border: 1px solid #3a4048;
-  border-radius: 5px;
-  padding: 2px 8px;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
   font-size: 0.7rem;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .inline-toggle:hover {
-  background: #343b45;
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .view-panel canvas {
@@ -155,54 +207,84 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  min-height: 0;
 }
 
+/* A compact wrapping row (not a stacked column) -- the canal panel is now the smaller
+ * side panel (see #views), so a tall stacked legend would eat most of its height. */
 .canal-legend {
   position: absolute;
   left: 8px;
+  right: 8px;
   bottom: 8px;
-  background: rgba(18, 21, 26, 0.72);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 0.7rem;
-  line-height: 1.5;
-  color: #d4d9e0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  background: rgba(15, 17, 22, 0.75);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 0.64rem;
+  line-height: 1.4;
+  color: var(--text-dim);
   pointer-events: none;
+  backdrop-filter: blur(4px);
 }
 
 .canal-legend .swatch {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
   margin-right: 6px;
 }
 
 #controls {
   flex: 0 0 auto;
-  padding: 10px 14px;
-  background: #1b1f26;
-  border-top: 1px solid #2a2f38;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 0.85rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 #controls button,
 #controls select {
-  background: #2a2f38;
-  color: #e8e8ec;
-  border: 1px solid #3a4048;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 0.82rem;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-#controls button:hover {
-  background: #343b45;
+#controls button:hover,
+#controls select:hover {
+  border-color: var(--accent);
+}
+
+#controls button:active {
+  background: var(--panel-header);
+}
+
+/* Play is the primary action in the transport group -- give it a distinct accent so
+ * it reads as the "main button" at a glance instead of blending into Reset/Reset clot. */
+#controls .control-group:first-child button:first-child {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1420;
+  font-weight: 600;
+}
+
+#controls .control-group:first-child button:first-child:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 #controls button:disabled {
@@ -213,6 +295,7 @@ body {
 #controls input[type='range'] {
   flex: 1 1 160px;
   min-width: 120px;
+  accent-color: var(--accent);
 }
 
 .control-group {
@@ -223,8 +306,93 @@ body {
 
 .debug-readout {
   font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: #8fd6a0;
   white-space: pre;
   margin-left: auto;
+  opacity: 0.85;
+}
+
+/*
+ * Mobile: portrait phones don't have the width for a 2fr/1fr side-by-side split, and
+ * vertical space is the scarce resource (not horizontal) -- so Eye keeps the top, but
+ * Canal/Head move to a shared row below it (side-by-side, smaller) instead of stacking
+ * further, and the VNG trace + controls both shrink to leave the views most of the
+ * screen. Controls also become a compact sticky bar so users don't have to scroll past
+ * the 3D views to reach Play/Reset.
+ */
+@media (max-width: 760px) {
+  #app {
+    padding: 6px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .vng-panel {
+    flex-basis: 90px;
+  }
+
+  .vng-header {
+    padding: 5px 10px;
+  }
+
+  .vng-header h2 {
+    font-size: 0.7rem;
+  }
+
+  .vng-legend {
+    gap: 8px;
+    font-size: 0.64rem;
+  }
+
+  #views {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: minmax(0, 2.1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'eye eye'
+      'canal head';
+    gap: 6px;
+  }
+
+  .view-panel h2 {
+    font-size: 0.68rem;
+    padding: 5px 8px;
+  }
+
+  .inline-toggle {
+    font-size: 0.64rem;
+    padding: 2px 6px;
+  }
+
+  .canal-legend {
+    font-size: 0.58rem;
+    padding: 4px 6px;
+    left: 5px;
+    bottom: 5px;
+  }
+
+  #controls {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    padding: 8px;
+    gap: 6px;
+    font-size: 0.78rem;
+    max-height: 34vh;
+    overflow-y: auto;
+  }
+
+  /* Touch targets: buttons/selects get taller tap areas on touch screens. */
+  #controls button,
+  #controls select {
+    padding: 9px 12px;
+    font-size: 0.8rem;
+    min-height: 40px;
+  }
+
+  .debug-readout {
+    margin-left: 0;
+    flex-basis: 100%;
+    font-size: 0.62rem;
+  }
 }
