@@ -1,24 +1,68 @@
 import { v3 } from './types';
+import { CANAL_RADIUS_M } from './canal';
 
 /**
- * All constants below are tuned to reproduce the qualitative clinical picture of
+ * Most constants below are tuned to reproduce the qualitative clinical picture of
  * posterior-canal canalithiasis (latency, ~15-25s nystagmus duration in a sustained
  * position, fatigue on repeat testing, reversal on sitting up, resolution after Epley
- * clearance) — they are not measured physical/biological quantities.
+ * clearance) — not measured physical/biological quantities. K_MOBILITY is the
+ * exception: see its own derivation below.
  */
 
 /** World-frame gravity (Z-up world), m/s^2. */
 export const G_WORLD = v3(0, 0, -9.81);
 
 /**
+ * Empirical otoconia settling speed, from Yang & Yang 2025 ("Mechanisms and clinical
+ * significance of Tumarkin-like phenomenon during the final step of the Epley and
+ * Semont maneuver", Front. Neurol. 16:1547798, Section 2.1.3): their virtual-simulation
+ * engine's resistance/friction parameters were tuned until settling speed converged on
+ * this figure, which they report "aligns well with clinical experience". (The same
+ * section also reports otoconia radius 0.5-15 µm/avg 7.5 µm, density 2.71 g/cm^3, and
+ * endolymph density 1 g/cm^3 -- not used below since this settling speed already
+ * folds those and Stokes drag together into one empirical number, the same lumping
+ * K_MOBILITY_PHYSICAL does; they'd matter for a from-scratch Stokes'-law derivation or
+ * a future short-arm re-entry model, see canalith.ts's TODO on clearedIntoUtricle.)
+ */
+const REFERENCE_SETTLING_SPEED_M_S = 2e-4; // 0.2 mm/s
+
+/**
+ * Physically-grounded overdamped mobility: ds/dt = K_MOBILITY_PHYSICAL * g_tangential,
+ * anchored so that at g_tangential = 1 g, the clot's LINEAR speed (ds/dt *
+ * CANAL_RADIUS_M) equals REFERENCE_SETTLING_SPEED_M_S above -- i.e. this reproduces the
+ * same overdamped Stokes-drag regime this app's own updateCanalith already assumes
+ * ("Stokes drag dominates at this scale, inertia of the particle itself is
+ * negligible" -- see canalith.ts), just with the mobility term now anchored to a real
+ * measured speed instead of picked by feel.
+ */
+export const K_MOBILITY_PHYSICAL = REFERENCE_SETTLING_SPEED_M_S / (CANAL_RADIUS_M * 9.81);
+
+/**
+ * At K_MOBILITY_PHYSICAL, a full canal transit (order 10+ mm through the duct, common
+ * crus, and into the utricle) takes on the order of a minute -- consistent with real
+ * Epley timing (each scripted hold in maneuvers/epley.ts is itself ~30s, for the same
+ * reason) -- but too slow to read as a legible "paroxysm" within a single held
+ * position, which is what this app's teaching/demo pacing (and the clinical
+ * nystagmus-duration picture the OTHER constants in this file are built to reproduce)
+ * needs. This factor compresses simulated time for the mobility term ONLY, for that
+ * teaching-mode purpose -- it changes no other physical assumption. Scripted maneuvers
+ * (maneuvers/*.ts) always run in this compressed mode; there is currently no
+ * "real-time" toggle, though K_MOBILITY_PHYSICAL is exported above for one to use
+ * later if wanted (e.g. a slower, literally-real-time practice mode).
+ *
+ * Chosen as a round number, not solved-for -- it happens to land K_MOBILITY within
+ * ~1% of this app's PRE-EXISTING (empirically-tuned-by-feel) value of 0.12, which is a
+ * reassuring independent consistency check rather than the goal.
+ */
+const TEACHING_MODE_TIME_SCALE = 19;
+
+/**
  * Lumped overdamped "mobility" of the otoconia clot along the canal duct:
  * ds/dt = K_MOBILITY * (tangential component of gravity, m/s^2).
- * Collapses Stokes-drag terms (clot buoyant weight, endolymph viscosity, duct radius)
- * into one tunable scalar since v1 does not model individual otoconia size/density.
- * Tuned low enough that a released clot's transit to its next resting point takes a
- * few seconds (the clinically visible nystagmus paroxysm), not an instant snap.
+ * = K_MOBILITY_PHYSICAL (real otoconia settling speed, see above) * TEACHING_MODE_TIME_SCALE
+ * (compressed for legible demo/teaching pacing -- see that constant's doc comment).
  */
-export const K_MOBILITY = 0.12;
+export const K_MOBILITY = K_MOBILITY_PHYSICAL * TEACHING_MODE_TIME_SCALE;
 
 /**
  * Seconds of sustained one-directional drive required before the clot is "released" to

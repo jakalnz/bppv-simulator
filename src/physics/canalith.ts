@@ -34,6 +34,19 @@ export interface CanalithState {
    * (real Epley's later steps keep moving it through exactly this stretch), so staying
    * reversible there matches the maneuver's own mechanism; only "settled at rest" needs
    * to become durable.
+   *
+   * TODO (not yet modeled): Yang & Yang 2025 (Front. Neurol. 16:1547798, see
+   * params.ts's K_MOBILITY_PHYSICAL doc comment for the full citation) describes a
+   * distinct anatomical "short arm" of the posterior canal -- a separate, short
+   * passage directly between the ampulla and the utricle, alongside the main "long
+   * arm" this app's whole s=[0, S_MAX] range already models. A real re-entry
+   * mechanism exists: if the Epley's final seated position isn't tilted nose-down
+   * enough, utricle-settled otoconia can slide back into that SHORT arm and produce
+   * genuine post-maneuver symptoms -- a real, position-dependent complication, unlike
+   * the "any ordinary subsequent head movement un-clears it" bug this sticky flag
+   * fixes. Modeling it properly would need a second, separate short-arm arc/position
+   * concept (not just relaxing this flag), since the short arm is a different physical
+   * path back to the ampulla than the long arm s already represents.
    */
   clearedIntoUtricle: boolean;
 }
