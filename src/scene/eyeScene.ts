@@ -17,6 +17,10 @@ const IRIS_Z = SCLERA_RADIUS + 0.02;
 const SPOKE_Z = SCLERA_RADIUS + 0.03;
 const PUPIL_Z = SCLERA_RADIUS + 0.05;
 const TICK_RADIAL_DISTANCE = SCLERA_RADIUS + 0.05;
+// The torsional tick-mark ring (see addTickMark) reads as a ring of spikes jutting out of
+// the eye, which was distracting rather than legible -- toggled off (code kept for future
+// reconsideration, e.g. a subtler flat-marker version) rather than deleted.
+const SHOW_TORSION_TICKS = false;
 
 const REALISTIC_EYE_MTL_URL = resolveAssetUrl(
   '/models/eyeball/eyeball.mtl',
@@ -181,6 +185,7 @@ export class EyeScene {
    * altering the underlying physics.
    */
   private addTickMark(): void {
+    if (!SHOW_TORSION_TICKS) return;
     const tickCount = 12;
     for (let i = 0; i < tickCount; i++) {
       const isPrimary = i === 0; // "12 o'clock" -- the main torsional reference

@@ -151,10 +151,13 @@ function mergeMeshes(meshes) {
   return { points, indices };
 }
 
+// ductPiece (Sp/Sa/Sl -- "slender part") is the narrow duct tube; bulgePiece (Ap/Aa/Al --
+// "ampulla") is the wider bony dilation between the duct and the Cup_Wall/Cup_Ut pieces --
+// without it there's a visible gap where the duct narrows into the ampulla.
 const CANALS = {
-  posterior: { fcsvPrefix: 'SSC_post', vtkPrefix: 'Post', ductPiece: 'Sp' },
-  anterior: { fcsvPrefix: 'SSC_ant', vtkPrefix: 'Ant', ductPiece: 'Sa' },
-  horizontal: { fcsvPrefix: 'SSC_lat', vtkPrefix: 'Lat', ductPiece: 'Sl' },
+  posterior: { fcsvPrefix: 'SSC_post', vtkPrefix: 'Post', ductPiece: 'Sp', bulgePiece: 'Ap' },
+  anterior: { fcsvPrefix: 'SSC_ant', vtkPrefix: 'Ant', ductPiece: 'Sa', bulgePiece: 'Aa' },
+  horizontal: { fcsvPrefix: 'SSC_lat', vtkPrefix: 'Lat', ductPiece: 'Sl', bulgePiece: 'Al' },
 };
 
 mkdirSync(OBJ_OUT_DIR, { recursive: true });
@@ -182,7 +185,7 @@ const commonCrusAnchorReal = mean([ccrusByLabel['SSC_ccrus_L_1'], ccrusByLabel['
 const report = [];
 const earAnatomy = { units: 'meters', frame: 'HeadFrame', anchor: 'utricle centroid', side: 'right', canals: {} };
 
-for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece }] of Object.entries(CANALS)) {
+for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece, bulgePiece }] of Object.entries(CANALS)) {
   const fcsvRows = parseFcsv(join(DATA_DIR, `${fcsvPrefix}.fcsv`));
   const byLabel = Object.fromEntries(fcsvRows.map((r) => [r.label, rasToHead(r.ras)]));
 
@@ -242,6 +245,12 @@ for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece }] of Object.entries(C
   const connectorMesh = loadMeshHead(`ls_Hsapiens_${vtkPrefix}_Cup_Ut.vtk`, ASSEMBLY_ANCHOR);
   writeObj(join(OBJ_OUT_DIR, `${canalName}-ampulla-utricle-wall.obj`), connectorMesh.points, connectorMesh.indices);
 
+  // Ampulla bulge (Ap/Aa/Al): the wider bony dilation the duct widens into before
+  // reaching the Cup_Wall/crista -- without this piece there's a visible gap between the
+  // slender duct tube and the ampulla wall.
+  const bulgeMesh = loadMeshHead(`ls_Hsapiens_${bulgePiece}.vtk`, ASSEMBLY_ANCHOR);
+  writeObj(join(OBJ_OUT_DIR, `${canalName}-ampulla-bulge.obj`), bulgeMesh.points, bulgeMesh.indices);
+
   earAnatomy.canals[canalName] = {
     // Real centerline, in the SAME shared assembly frame as every mesh below -- lets the
     // scene sample the true duct path (for the debris/cupula marker) directly, with no
@@ -266,6 +275,7 @@ for (const [canalName, { fcsvPrefix, vtkPrefix, ductPiece }] of Object.entries(C
     ductMesh: `/models/ear-anatomy/${canalName}-duct.obj`,
     ampullaMesh: `/models/ear-anatomy/${canalName}-ampulla.obj`,
     connectorMesh: `/models/ear-anatomy/${canalName}-ampulla-utricle-wall.obj`,
+    ampullaBulgeMesh: `/models/ear-anatomy/${canalName}-ampulla-bulge.obj`,
   };
 }
 

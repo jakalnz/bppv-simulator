@@ -61,7 +61,8 @@
       ],
       "ductMesh": "/models/ear-anatomy/posterior-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/posterior-ampulla.obj",
-      "connectorMesh": "/models/ear-anatomy/posterior-ampulla-utricle-wall.obj"
+      "connectorMesh": "/models/ear-anatomy/posterior-ampulla-utricle-wall.obj",
+      "ampullaBulgeMesh": "/models/ear-anatomy/posterior-ampulla-bulge.obj"
     },
     "anterior": {
       "centerline": [
@@ -120,7 +121,8 @@
       ],
       "ductMesh": "/models/ear-anatomy/anterior-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/anterior-ampulla.obj",
-      "connectorMesh": "/models/ear-anatomy/anterior-ampulla-utricle-wall.obj"
+      "connectorMesh": "/models/ear-anatomy/anterior-ampulla-utricle-wall.obj",
+      "ampullaBulgeMesh": "/models/ear-anatomy/anterior-ampulla-bulge.obj"
     },
     "horizontal": {
       "centerline": [
@@ -179,7 +181,8 @@
       ],
       "ductMesh": "/models/ear-anatomy/horizontal-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/horizontal-ampulla.obj",
-      "connectorMesh": "/models/ear-anatomy/horizontal-ampulla-utricle-wall.obj"
+      "connectorMesh": "/models/ear-anatomy/horizontal-ampulla-utricle-wall.obj",
+      "ampullaBulgeMesh": "/models/ear-anatomy/horizontal-ampulla-bulge.obj"
     }
   },
   "commonCrusMesh": "/models/ear-anatomy/common-crus.obj",

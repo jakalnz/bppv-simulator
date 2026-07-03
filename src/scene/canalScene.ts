@@ -46,6 +46,10 @@ interface EarAnatomyCanal {
   ductMesh: string;
   ampullaMesh: string;
   connectorMesh: string;
+  /** Bony ampulla bulge (Ap/Aa/Al) the duct widens into before reaching ampullaMesh's
+   * crista/cupula wall -- without it there's a visible gap between the slender duct tube
+   * and the ampulla wall, see build.mjs. */
+  ampullaBulgeMesh: string;
 }
 interface EarAnatomyData {
   side: 'left' | 'right';
@@ -324,6 +328,10 @@ export class CanalScene {
     for (const [canal, anatomy] of Object.entries(EAR_ANATOMY.canals) as [string, EarAnatomyCanal][]) {
       await loadInto(anatomy.ductMesh, this.ductMaterials[canal]);
       await loadInto(anatomy.ampullaMesh, this.ampullaMaterials[canal]);
+      // Same material as the duct (not the ampulla wall) -- the bulge sits between the
+      // two and reads as a continuation of the duct tapering wider, not as part of the
+      // crista/cupula wall structure.
+      await loadInto(anatomy.ampullaBulgeMesh, this.ductMaterials[canal]);
       await loadInto(anatomy.connectorMesh, CONNECTOR_GLASS);
     }
     await loadInto(EAR_ANATOMY.commonCrusMesh, COMMON_CRUS_GLASS);

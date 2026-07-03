@@ -67,11 +67,6 @@ export class HeadScene {
     this.addEye(0.22, 0.08); // subject's left eye (HeadFrame +Z-ish side)
     this.addEye(-0.22, 0.08); // subject's right eye
 
-    // Ear markers: right (red) and left (blue) so "which ear is down" is answerable at a
-    // glance, kept regardless of which head model (procedural or realistic) is showing.
-    this.addEar(0.5, 0xc0392b); // HeadFrame +Y = left maps to Three -Z, so right ear (-Y) is Three +Z
-    this.addEar(-0.5, 0x3b6ea5);
-
     this.scene.add(this.headGroup);
     this.loadRealisticHead();
   }
@@ -148,16 +143,6 @@ export class HeadScene {
     // rather than being occluded inside the sphere (same principle as eyeScene.ts).
     pupil.position.copy(eyeCenter).add(new THREE.Vector3(0.06, 0, 0));
     this.proceduralParts.add(pupil);
-  }
-
-  private addEar(z: number, color: number): void {
-    const ear = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 12, 10),
-      new THREE.MeshStandardMaterial({ color })
-    );
-    ear.scale.set(0.5, 1, 0.8);
-    ear.position.copy(onHeadSurface(0, 0, z));
-    this.headGroup.add(ear);
   }
 
   setOrientation(qHead: Quat): void {
