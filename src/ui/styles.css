@@ -40,7 +40,7 @@ body {
 }
 
 .vng-panel {
-  flex: 0 0 150px;
+  flex: 0 0 120px;
   background: var(--panel);
   border: 1px solid var(--border);
   display: flex;
@@ -130,6 +130,30 @@ body {
   color: var(--text-dim);
 }
 
+/* The canal panel's own About pill lives INSIDE that panel's header (not the app-level
+ * top-right corner) -- it's a normal flex item alongside the style/gravity-mode selects,
+ * so on narrow panels where the header wraps, it naturally drops to its own row below
+ * the title/selects ("shifted down") instead of floating over the canvas. */
+.about-pill--inline {
+  position: static;
+  padding: 3px 10px;
+  backdrop-filter: none;
+}
+
+.about-pill--inline:hover {
+  background: var(--bg);
+}
+
+/* position:fixed with top/right set by JS (see main.ts) from the pill's own
+ * getBoundingClientRect() -- the canal panel has overflow:hidden (for the canvas's
+ * rounded corners), which would clip an absolutely-positioned popover nested inside it,
+ * so this escapes that ancestor entirely instead of being confined to the panel's box. */
+.about-popover--inline {
+  position: fixed;
+  max-width: 260px;
+  z-index: 20;
+}
+
 /*
  * Desktop layout: Eye is the primary diagnostic view, given the most space; Canal and
  * Head are secondary reference views, stacked in a narrower side column (canal over
@@ -139,7 +163,7 @@ body {
 #views {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1.7fr 1.3fr;
   grid-template-rows: 1fr 1fr;
   grid-template-areas:
     'eye canal'
@@ -171,6 +195,7 @@ body {
 }
 
 .view-panel h2 {
+  position: relative;
   margin: 0;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -210,24 +235,20 @@ body {
   min-height: 0;
 }
 
-/* A compact wrapping row (not a stacked column) -- the canal panel is now the smaller
- * side panel (see #views), so a tall stacked legend would eat most of its height. */
+/* A compact wrapping row, laid out in normal flow BELOW the canvas (not an absolute
+ * overlay on top of it) -- overlaying was hiding the model itself on the canal panel,
+ * which is the smaller side panel and doesn't have room to spare under a floating box. */
 .canal-legend {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 3px 10px;
-  background: rgba(15, 17, 22, 0.75);
-  border-radius: var(--radius-sm);
+  background: var(--panel-header);
+  border-top: 1px solid var(--border);
   padding: 5px 8px;
   font-size: 0.64rem;
   line-height: 1.4;
   color: var(--text-dim);
-  pointer-events: none;
-  backdrop-filter: blur(4px);
 }
 
 .canal-legend .swatch {
@@ -381,8 +402,11 @@ body {
   .canal-legend {
     font-size: 0.58rem;
     padding: 4px 6px;
-    left: 5px;
-    bottom: 5px;
+  }
+
+  .about-pill--inline {
+    padding: 2px 8px;
+    font-size: 0.6rem;
   }
 
   #controls {
