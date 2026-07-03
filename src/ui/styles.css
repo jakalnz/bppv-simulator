@@ -354,12 +354,16 @@ body {
     font-size: 0.64rem;
   }
 
+  /* On mobile the CANAL view (not Eye) gets the large top slot -- the otoconia clot is
+   * small and needs to be tracked as it moves through the duct, which is illegible when
+   * squashed into the small paired-row slot Eye gets on desktop. Eye moves down into
+   * that smaller paired row instead, alongside Head. */
   #views {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: minmax(0, 2.1fr) minmax(0, 1fr);
     grid-template-areas:
-      'eye eye'
-      'canal head';
+      'canal canal'
+      'eye head';
     gap: 6px;
   }
 
