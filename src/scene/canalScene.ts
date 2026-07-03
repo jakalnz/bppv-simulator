@@ -8,6 +8,7 @@ import {
   CanalSelector,
   CanalType,
   S_MAX,
+  S_COMMON_CRUS,
 } from '../physics/canal';
 import { Quat, normalize, quatInvert, rotateVec } from '../physics/types';
 import { G_WORLD } from '../physics/params';
@@ -172,6 +173,12 @@ export class CanalScene {
   // the physics-linked debris/cupula markers (see ductPosition/ductTangent).
   private readonly labyrinthAssembly = new THREE.Group();
   private readonly realCenterlineCurves: Record<string, THREE.CatmullRomCurve3> = {};
+  // Continuation of the duct centerline PAST S_COMMON_CRUS, into the common crus and on
+  // to the utricle -- so a fully-cleared clot (e.g. after a completed Epley) visibly
+  // travels through the crus and settles on the utricle floor instead of stopping dead
+  // at the duct's own far end, which is what the duct-only curve above does by itself.
+  // See ductPosition's doc comment for how s selects between the two curves.
+  private readonly realExtensionCurves: Record<string, THREE.CatmullRomCurve3> = {};
   // Per-canal duct/ampulla materials -- opacity toggled between active/inactive in
   // updateActiveCanalHighlight so the currently selected canal's real duct is
   // unambiguous, see loadRealAnatomy's doc comment.
@@ -250,6 +257,20 @@ export class CanalScene {
 
     for (const [canal, anatomy] of Object.entries(EAR_ANATOMY.canals) as [string, EarAnatomyCanal][]) {
       this.realCenterlineCurves[canal] = new THREE.CatmullRomCurve3(anatomy.centerline.map((p) => toThreeVector3(p)));
+      // Starts where the duct centerline ends (the non-ampullary far station) so there's
+      // no visible jump at the S_COMMON_CRUS handoff -- then, for 'posterior' (the only
+      // canal with a real common-crus landmark, see EarAnatomyCanal.commonCrusAnchor),
+      // through that landmark; every canal ends at the utricle's own centroid, which
+      // build.mjs recenters to exactly the shared assembly's local origin (0,0,0) -- see
+      // its "Utricle: recentered on the assembly anchor (its own centroid)" comment --
+      // so no separate lookup is needed for that endpoint.
+      const ductEnd = toThreeVector3(anatomy.centerline[anatomy.centerline.length - 1]);
+      const utricleCenter = new THREE.Vector3(0, 0, 0);
+      const waypoints =
+        canal === 'posterior'
+          ? [ductEnd, toThreeVector3(anatomy.commonCrusAnchor), utricleCenter]
+          : [ductEnd, utricleCenter];
+      this.realExtensionCurves[canal] = new THREE.CatmullRomCurve3(waypoints);
     }
 
     this.canalGroup.add(this.labyrinthAssembly);
@@ -343,21 +364,44 @@ export class CanalScene {
   }
 
   /**
+   * Picks which real curve s falls on (see realCenterlineCurves/realExtensionCurves'
+   * doc comments) and the arc-length fraction along it. For s <= S_COMMON_CRUS, that's
+   * the duct centerline itself, spanning its FULL length by s=S_COMMON_CRUS (not
+   * s=S_MAX -- matching physics/canalith.ts's isCleared(s), so the clot visibly reaches
+   * the duct's real end exactly when it's considered "cleared the duct", not partway
+   * through it as an s/S_MAX mapping would have it arrive). Beyond that, s continues
+   * onto the extension curve (duct end -> common crus -> utricle), reaching the utricle
+   * by s=S_MAX.
+   */
+  private selectRealCurve(s: number): { curve: THREE.CatmullRomCurve3 | undefined; u: number } {
+    if (s <= S_COMMON_CRUS) {
+      return {
+        curve: this.realCenterlineCurves[this.selector.canal],
+        u: Math.max(0, Math.min(1, s / S_COMMON_CRUS)),
+      };
+    }
+    return {
+      curve: this.realExtensionCurves[this.selector.canal],
+      u: Math.max(0, Math.min(1, (s - S_COMMON_CRUS) / (S_MAX - S_COMMON_CRUS))),
+    };
+  }
+
+  /**
    * World-space position along the currently selected canal's duct at arc-position s.
    * "basic" style keeps the original idealized-circle path (canalPosition); "realistic"/
    * "detailed" instead sample the REAL duct centerline (CatmullRomCurve3 through
-   * EAR_ANATOMY's real station points) at the matching arc-length FRACTION s/S_MAX, so
-   * the physics-driven debris marker visibly rides the actual anatomical tube rendered by
-   * labyrinthAssembly. Physics itself (s, ds/dt) is entirely unchanged -- only where that
-   * same s gets drawn changes. Uses the cached assembly rotation/translation (see
-   * updateAssemblyTransform, called once per repositionForCanal) rather than
-   * recomputing them on every call.
+   * EAR_ANATOMY's real station points, continuing onto realExtensionCurves past
+   * S_COMMON_CRUS -- see selectRealCurve), so the physics-driven debris marker visibly
+   * rides the actual anatomical tube rendered by labyrinthAssembly, all the way through
+   * the common crus and onto the utricle once cleared. Physics itself (s, ds/dt) is
+   * entirely unchanged -- only where that same s gets drawn changes. Uses the cached
+   * assembly rotation/translation (see updateAssemblyTransform, called once per
+   * repositionForCanal) rather than recomputing them on every call.
    */
   private ductPosition(s: number): THREE.Vector3 {
     if (this.style === 'basic') return toThreeVector3(canalPosition(s, this.selector));
-    const curve = this.realCenterlineCurves[this.selector.canal];
+    const { curve, u } = this.selectRealCurve(s);
     if (!curve) return toThreeVector3(canalPosition(s, this.selector));
-    const u = Math.max(0, Math.min(1, s / S_MAX));
     // Translation only (meshTranslation), no rotation -- this is the SAME transform
     // applied to the loaded real duct mesh (labyrinthAssembly, see repositionForCanal),
     // and the 5-station centerline this curve is built from already agrees with that
@@ -369,9 +413,8 @@ export class CanalScene {
   /** Tangent counterpart to ductPosition -- see its doc comment. */
   private ductTangent(s: number): THREE.Vector3 {
     if (this.style === 'basic') return toThreeVector3(canalTangent(s, this.selector)).normalize();
-    const curve = this.realCenterlineCurves[this.selector.canal];
+    const { curve, u } = this.selectRealCurve(s);
     if (!curve) return toThreeVector3(canalTangent(s, this.selector)).normalize();
-    const u = Math.max(0, Math.min(1, s / S_MAX));
     return mirrorForSide(curve.getTangentAt(u), this.selector.side).normalize();
   }
 
