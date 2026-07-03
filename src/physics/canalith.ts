@@ -13,10 +13,33 @@ export interface CanalithState {
   released: boolean;
   /** Direction (-1, 0, +1) of the most recent sustained drive. */
   lastTargetSign: number;
+  /**
+   * True once the clot has settled all the way at s=S_MAX -- fully swept through the
+   * common crus and at rest in the utricle, not just past the S_COMMON_CRUS threshold
+   * (see isCleared). From that point on updateCanalith stops evolving s entirely,
+   * regardless of subsequent gHead.
+   *
+   * Without this, s was a fully reversible continuum end-to-end: after a successful
+   * Epley walked s to S_MAX, an ORDINARY later head movement (not a repeat maneuver --
+   * just normal mouse-drag/gyro motion) could walk s back down past S_COMMON_CRUS,
+   * "un-clearing" the debris and re-driving the cupula/nystagmus as if it had re-entered
+   * the canal. Real otoconia don't do this: once swept into the utricle (a large open
+   * sac, not a continuation of the thin canal duct), they're mechanically lost to the
+   * canal's fluid dynamics -- a successful CRP is durable against ordinary subsequent
+   * head movement, not just momentarily "cleared" until the next tilt walks it back.
+   *
+   * Deliberately keyed on S_MAX (fully at rest against the far wall), not
+   * S_COMMON_CRUS -- while still transiting the crus-to-utricle stretch (s between the
+   * two), the debris is plausibly still being actively swept by an IN-PROGRESS maneuver
+   * (real Epley's later steps keep moving it through exactly this stretch), so staying
+   * reversible there matches the maneuver's own mechanism; only "settled at rest" needs
+   * to become durable.
+   */
+  clearedIntoUtricle: boolean;
 }
 
 export function initialCanalithState(): CanalithState {
-  return { s: 0, dsdt: 0, latencyTimer: 0, released: false, lastTargetSign: 0 };
+  return { s: 0, dsdt: 0, latencyTimer: 0, released: false, lastTargetSign: 0, clearedIntoUtricle: false };
 }
 
 /**
@@ -52,6 +75,11 @@ export function updateCanalith(
   dt: number,
   selector: CanalSelector
 ): CanalithState {
+  // Already settled in the utricle -- see clearedIntoUtricle's doc comment. Frozen for
+  // good; only a fresh initialCanalithState() (Reset / Reset clot / switching canal)
+  // clears this.
+  if (state.clearedIntoUtricle) return state;
+
   const target = targetVelocity(state.s, gHead, selector);
   const targetSign = Math.abs(target) < DRIVE_EPSILON ? 0 : Math.sign(target);
 
@@ -81,15 +109,17 @@ export function updateCanalith(
   // actually going anywhere, and a later direction reversal would have to first unwind
   // that fictitious velocity before responding.
   let dsdt = laggedVelocity;
+  let clearedIntoUtricle: boolean = state.clearedIntoUtricle;
   if (s <= 0 && laggedVelocity < 0) {
     s = 0;
     dsdt = 0;
   } else if (s >= S_MAX && laggedVelocity > 0) {
     s = S_MAX;
     dsdt = 0;
+    clearedIntoUtricle = true;
   }
 
-  return { s, dsdt, latencyTimer, released, lastTargetSign };
+  return { s, dsdt, latencyTimer, released, lastTargetSign, clearedIntoUtricle };
 }
 
 /** True once the clot has passed the common crus (cleared into the utricle, e.g. after Epley). */
