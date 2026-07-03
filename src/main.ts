@@ -38,40 +38,29 @@ const canalScene = new CanalScene(canalCanvas);
 const headScene = new HeadScene(headCanvas);
 const vngTrace = new VngTrace(vngCanvas);
 
-// Two independent About pills -- the app-level one (whole-app model credits) and the
-// canal panel's own (the IE-Map academic citation for that specific model) -- wired the
-// same way: toggle on click, close on any outside click, and close the OTHER one too so
-// at most one popover is open at a time.
-const aboutPairs = [
-  ['about-pill', 'about-popover'],
-  ['canal-about-pill', 'canal-about-popover'],
-].map(([pillId, popoverId]) => ({
-  pill: document.getElementById(pillId) as HTMLButtonElement,
-  popover: document.getElementById(popoverId) as HTMLDivElement,
-}));
-
-for (const { pill, popover } of aboutPairs) {
-  pill.addEventListener('click', () => {
-    const opening = popover.hidden;
-    for (const other of aboutPairs) other.popover.hidden = true;
-    popover.hidden = !opening;
-    // position:fixed popovers (see .about-popover--inline) aren't anchored by CSS --
-    // their host panel has overflow:hidden (for the canvas's rounded corners), which
-    // would clip a CSS-anchored absolute popover, so position from the pill's own
-    // on-screen rect instead, computed fresh each time it opens (panel sizes vary by
-    // breakpoint/orientation).
-    if (opening && popover.classList.contains('about-popover--inline')) {
-      const rect = pill.getBoundingClientRect();
-      popover.style.top = `${rect.bottom + 4}px`;
-      popover.style.right = `${window.innerWidth - rect.right}px`;
-    }
-  });
-}
+// Canal panel's own About pill -- cites the academic source for that specific model
+// (IE-Map). Its popover uses position:fixed (see .about-popover--inline), since the
+// canal panel has overflow:hidden for the canvas's rounded corners, which would clip a
+// CSS-anchored absolute popover -- so position from the pill's own on-screen rect
+// instead, computed fresh each time it opens (panel size varies by breakpoint).
+const canalAboutPill = document.getElementById('canal-about-pill') as HTMLButtonElement;
+const canalAboutPopover = document.getElementById('canal-about-popover') as HTMLDivElement;
+canalAboutPill.addEventListener('click', () => {
+  const opening = canalAboutPopover.hidden;
+  canalAboutPopover.hidden = !opening;
+  if (opening) {
+    const rect = canalAboutPill.getBoundingClientRect();
+    canalAboutPopover.style.top = `${rect.bottom + 4}px`;
+    canalAboutPopover.style.right = `${window.innerWidth - rect.right}px`;
+  }
+});
 document.addEventListener('click', (e) => {
-  for (const { pill, popover } of aboutPairs) {
-    if (!popover.hidden && e.target !== pill && !popover.contains(e.target as Node)) {
-      popover.hidden = true;
-    }
+  if (
+    !canalAboutPopover.hidden &&
+    e.target !== canalAboutPill &&
+    !canalAboutPopover.contains(e.target as Node)
+  ) {
+    canalAboutPopover.hidden = true;
   }
 });
 

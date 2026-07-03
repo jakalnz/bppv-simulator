@@ -28,7 +28,6 @@ body {
 }
 
 #app {
-  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -89,19 +88,17 @@ body {
   display: block;
 }
 
+/* Lives INSIDE the canal panel's own header -- a normal flex item alongside the
+ * style/gravity-mode selects, so on narrow panels where the header wraps, it naturally
+ * drops to its own row below the title/selects instead of floating over the canvas. */
 .about-pill {
-  position: absolute;
-  top: calc(16px + env(safe-area-inset-top));
-  right: 16px;
-  z-index: 10;
-  background: rgba(32, 35, 43, 0.9);
+  background: var(--bg);
   color: var(--text-dim);
   border: 1px solid var(--border-soft);
   border-radius: 999px;
-  padding: 5px 14px;
+  padding: 3px 10px;
   font-size: 0.72rem;
   cursor: pointer;
-  backdrop-filter: blur(6px);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -110,11 +107,13 @@ body {
   color: var(--text);
 }
 
+/* position:fixed with top/right set by JS (see main.ts) from the pill's own
+ * getBoundingClientRect() -- the canal panel has overflow:hidden (for the canvas's
+ * rounded corners), which would clip an absolutely-positioned popover nested inside it,
+ * so this escapes that ancestor entirely instead of being confined to the panel's box. */
 .about-popover {
-  position: absolute;
-  top: calc(46px + env(safe-area-inset-top));
-  right: 16px;
-  z-index: 10;
+  position: fixed;
+  z-index: 20;
   background: rgba(20, 22, 28, 0.97);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
@@ -122,36 +121,12 @@ body {
   font-size: 0.7rem;
   line-height: 1.5;
   color: var(--text-faint);
-  max-width: 220px;
+  max-width: 260px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .about-popover a {
   color: var(--text-dim);
-}
-
-/* The canal panel's own About pill lives INSIDE that panel's header (not the app-level
- * top-right corner) -- it's a normal flex item alongside the style/gravity-mode selects,
- * so on narrow panels where the header wraps, it naturally drops to its own row below
- * the title/selects ("shifted down") instead of floating over the canvas. */
-.about-pill--inline {
-  position: static;
-  padding: 3px 10px;
-  backdrop-filter: none;
-}
-
-.about-pill--inline:hover {
-  background: var(--bg);
-}
-
-/* position:fixed with top/right set by JS (see main.ts) from the pill's own
- * getBoundingClientRect() -- the canal panel has overflow:hidden (for the canvas's
- * rounded corners), which would clip an absolutely-positioned popover nested inside it,
- * so this escapes that ancestor entirely instead of being confined to the panel's box. */
-.about-popover--inline {
-  position: fixed;
-  max-width: 260px;
-  z-index: 20;
 }
 
 /*
@@ -195,7 +170,6 @@ body {
 }
 
 .view-panel h2 {
-  position: relative;
   margin: 0;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -404,7 +378,7 @@ body {
     padding: 4px 6px;
   }
 
-  .about-pill--inline {
+  .about-pill {
     padding: 2px 8px;
     font-size: 0.6rem;
   }
