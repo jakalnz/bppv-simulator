@@ -332,19 +332,20 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-/* Pill-shaped (fully rounded), same visual language as .about-pill -- also more
- * compact than the earlier rounded-rect buttons, which shrinks the controls bar's
- * overall height; since #views has flex:1 1 auto and #controls is flex:0 0 auto (sized
- * to its own content), that saved height goes straight to the Eye/Canal/Head views
- * without any other layout change needed. */
+/* Pill-shaped (fully rounded), same visual language as .about-pill -- but same
+ * padding/font-size (hence same height) as the original rounded-rect buttons, not the
+ * more compact sizing tried first, which read as too short. #controls's own tighter
+ * padding/gap above still shrank the bar somewhat; since #views has flex:1 1 auto and
+ * #controls is flex:0 0 auto (sized to its own content), that saved height goes
+ * straight to the Eye/Canal/Head views without any other layout change needed. */
 #controls button,
 #controls select {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border-soft);
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.8rem;
+  padding: 7px 12px;
+  font-size: 0.82rem;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }

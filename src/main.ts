@@ -331,6 +331,11 @@ function resetPhysics(): void {
 
 const FIXED_DT = 1 / 120;
 
+// TEMPORARY: short-arm re-entry (see physics/shortArmReentry.ts) is firing too easily
+// in practice -- disabled for now while that's tuned, without deleting the pathway
+// itself. Flip back to true to re-enable.
+const SHORT_ARM_REENTRY_ENABLED = false;
+
 /** One fixed-timestep physics update: orientation -> gravity -> clot -> cupula -> VOR. */
 function stepPhysicsOnce(dt: number): void {
   const source = activeOrientationSource();
@@ -381,7 +386,12 @@ function stepPhysicsOnce(dt: number): void {
     // see that constant's doc comment). Past that window, skip evaluating it entirely
     // -- the debris is considered permanently safe, matching clearedIntoUtricle's own
     // "durable once settled" behavior.
-    if (canalithState.clearedIntoUtricle && selector.canal === 'posterior' && secondsSinceSettled < ADHERENCE_WINDOW_SECONDS) {
+    if (
+      SHORT_ARM_REENTRY_ENABLED &&
+      canalithState.clearedIntoUtricle &&
+      selector.canal === 'posterior' &&
+      secondsSinceSettled < ADHERENCE_WINDOW_SECONDS
+    ) {
       secondsSinceSettled += dt;
       shortArmState = updateShortArm(shortArmState, gHead, dt, SHORT_ARM_PATH, selector.side);
       if (shortArmState.progress >= 1) {
