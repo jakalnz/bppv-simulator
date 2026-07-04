@@ -396,13 +396,7 @@ setInterval(() => {
 
 function renderFrame(): void {
   eyeScene.setEyeAngle(decomposeEyeMovement(vor.eyeAngle, selector));
-  // Attached cupulolithiasis debris never moves along the duct -- pin the rendered
-  // marker at the cupula (s=0). Once released (see stepPhysicsOnce), it follows
-  // canalithState.s like ordinary canalithiasis -- the "crystals peel off the cupula and
-  // drift into the duct" visual is a direct consequence of this switch, not a scripted
-  // animation.
   const useAttachedCupulaPhysics = selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased;
-  canalScene.setDebrisAttached(useAttachedCupulaPhysics);
   const inShortArmReentry =
     canalithState.clearedIntoUtricle && selector.canal === 'posterior' && shortArmState.progress > 0;
   if (inShortArmReentry) {

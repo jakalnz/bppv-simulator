@@ -765,36 +765,16 @@ export class CanalScene {
     }
   }
 
-  /**
-   * Whether the debris cluster is currently attached to the cupula (still-attached
-   * cupulolithiasis) rather than free-floating -- only affects the "detailed" style,
-   * which presses the cluster against the dome's convex surface instead of floating
-   * beside it (see setClotArcPosition). Basic/realistic styles don't distinguish this
-   * visually (the cluster already reads as "at the ampulla" either way there).
-   */
-  private debrisAttachedToCupula = false;
-
-  setDebrisAttached(attached: boolean): void {
-    this.debrisAttachedToCupula = attached;
-  }
-
   setClotArcPosition(s: number): void {
     const tangent = this.ductTangent(s);
     const position = this.ductPosition(s);
-    if (this.debrisAttachedToCupula) {
-      // Sit the cluster on top of the cupula dome -- the real elevated position (see
-      // cupulaElevation's doc comment), not the duct centerline -- matching how clinical
-      // illustrations show cupulolithiasis debris sitting ON the cupula, raised off the
-      // crista (docs/cupula positions.png; e.g. also Fig. 4 in Parnes/Agrawal/Atlas 2003).
-      // Applies in all styles now, not just "detailed" -- this is real anatomy, not a
-      // detailed-only decorative flourish.
-      position.add(this.cupulaElevation);
-      if (this.style === 'detailed') {
-        // Additionally press against the dome's convex outer surface along the duct
-        // tangent, since the detailed dome mesh itself is centered at the elevated point.
-        position.add(tangent.clone().multiplyScalar(CUPULA_RADIUS_SCENE * 0.9));
-      }
-    }
+    // Attached-to-cupula debris renders at plain ductPosition(0/s) -- no extra
+    // elevation offset. Tried lifting it toward a schematic/real "cupula dome"
+    // position (see git history), but every version of that offset placed debris
+    // visibly outside the real ampulla mesh for at least one canal/ear -- and s=0 is
+    // exactly where the debris already jumps to the moment the cupula releases (see
+    // main.ts's canalithStateAtAmpulla), so rendering the still-attached case at the
+    // same point is both simpler and consistent with that transition.
     this.clotCluster.position.copy(position);
     // Orient the cluster's jitter pattern along the local duct tangent so it reads as an
     // elongated conglomerate mass in the duct's own direction, not a fixed world-aligned
