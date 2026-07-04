@@ -671,7 +671,11 @@ body {
   /* max-height dropped from 16vh -- the two-row structure (see controls.ts's
    * contextRow/playbackRow) now sets a predictable height from its own content instead
    * of an unpredictable wrap, so it no longer needs as much headroom reserved for a
-   * worst-case wrap, and the scrollbar is a rare fallback rather than a routine outcome. */
+   * worst-case wrap, and the scrollbar is a rare fallback rather than a routine outcome.
+   * Raised back up slightly (12vh -> 14vh) now that maneuver mode routinely adds a third
+   * row (the position label, see controls.ts's maneuverLabelRow) -- otherwise that row
+   * was clipped behind the scrollbar on every short phone screen instead of the rare
+   * fallback it's meant to be. */
   #controls {
     position: sticky;
     bottom: 0;
@@ -679,7 +683,7 @@ body {
     padding: 5px 8px;
     gap: 3px;
     font-size: 0.78rem;
-    max-height: 12vh;
+    max-height: 14vh;
     overflow-y: auto;
   }
 

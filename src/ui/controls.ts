@@ -60,6 +60,7 @@ export class Controls {
   // the current mode (see updateModeVisibility), rather than always showing every
   // control regardless of relevance.
   private readonly maneuverGroup: HTMLDivElement;
+  private readonly maneuverLabelRow: HTMLDivElement;
   private readonly gyroGroup: HTMLDivElement;
   private scrubbing = false;
   private gyroEnabled = false;
@@ -202,7 +203,6 @@ export class Controls {
     this.scrub.addEventListener('input', () => callbacks.onScrub(parseFloat(this.scrub.value)));
 
     this.label = document.createElement('span');
-    this.label.style.minWidth = '220px';
 
     // Mode picker's trigger button always reads "Mode" (not the current selection, unlike
     // the ear/canal/pathology toggles) -- the current mode is shown instead as the second
@@ -245,13 +245,20 @@ export class Controls {
     this.updateGyroToggleLabel();
 
     this.gyroCalibrateBtn = document.createElement('button');
-    this.gyroCalibrateBtn.textContent = 'Calibrate';
+    // Label itself carries the calibration state ("Uncalibrated" -> "Recalibrate" on
+    // first tap) instead of a separate instructional hint string (see gyroStatus below,
+    // which no longer needs to say this) -- the button's own text already tells you
+    // whether you've calibrated yet, without a second element to read.
+    this.updateCalibrateLabel(false);
     // Callable repeatedly, not just once -- gyroSource.calibrateZero() re-zeroes to
     // whatever orientation the phone is CURRENTLY in on every tap (see
     // DeviceOrientationSource.calibrateZero), so a second (or later) press re-centers
     // the head back to neutral from wherever it's drifted to, same action each time.
     this.gyroCalibrateBtn.title = 'Hold the phone naturally, then tap to set this as head-neutral (tap again anytime to re-center)';
-    this.gyroCalibrateBtn.addEventListener('click', () => callbacks.onCalibrateGyro());
+    this.gyroCalibrateBtn.addEventListener('click', () => {
+      callbacks.onCalibrateGyro();
+      this.updateCalibrateLabel(true);
+    });
 
     this.gyroStatus = document.createElement('span');
 
@@ -265,7 +272,15 @@ export class Controls {
     // other two modes.
     this.maneuverGroup = document.createElement('div');
     this.maneuverGroup.className = 'control-group';
-    this.maneuverGroup.append(this.maneuverSelect, this.playBtn, this.scrub, this.label);
+    this.maneuverGroup.append(this.maneuverSelect, this.playBtn, this.scrub);
+
+    // The current waypoint's position label (e.g. "Seated upright") used to sit crammed
+    // inline after the scrub bar -- moved to its own row below now that the context row
+    // consolidation (BPPV Variant/Mode/Reset) freed up enough height to afford a third
+    // row here without it costing the views anything above.
+    this.maneuverLabelRow = document.createElement('div');
+    this.maneuverLabelRow.className = 'control-row maneuver-label-row';
+    this.maneuverLabelRow.append(this.label);
 
     // Gyroscope on/off + calibrate: only meaningful in "gyro" mode.
     this.gyroGroup = document.createElement('div');
@@ -302,7 +317,7 @@ export class Controls {
     playbackRow.className = 'control-row';
     playbackRow.append(this.maneuverGroup, this.gyroGroup, this.debug);
 
-    container.append(contextRow, playbackRow);
+    container.append(contextRow, playbackRow, this.maneuverLabelRow);
   }
 
   /**
@@ -373,6 +388,7 @@ export class Controls {
 
   private updateModeVisibility(mode: PlaybackMode): void {
     this.maneuverGroup.style.display = mode === 'maneuver' ? '' : 'none';
+    this.maneuverLabelRow.style.display = mode === 'maneuver' ? '' : 'none';
     this.gyroGroup.style.display = mode === 'gyro' ? '' : 'none';
     // "Reset debris" (onResetClot) exists specifically for mouse-drag/gyro modes, where
     // there's no scripted maneuver position to reset otherwise -- see its own doc
@@ -390,12 +406,21 @@ export class Controls {
     }`;
   }
 
+  private updateCalibrateLabel(calibrated: boolean): void {
+    this.gyroCalibrateBtn.textContent = calibrated ? 'Recalibrate' : 'Uncalibrated';
+  }
+
   /** Sets the toggle's displayed state without re-firing onToggleGyro -- used when main.ts
    * needs to reflect an outcome the user didn't directly cause (e.g. permission denied
    * reverting an optimistic "On" back to "Off"). */
   setGyroEnabled(enabled: boolean): void {
     this.gyroEnabled = enabled;
     this.updateGyroToggleLabel();
+    // Every (re)start of the gyro listener is a fresh session with no zero point set yet
+    // -- whether this is turning ON for the first time, being toggled back on after being
+    // turned off, or being turned off itself, the calibrate button should read
+    // "Uncalibrated" until the user taps it again in THIS session.
+    this.updateCalibrateLabel(false);
   }
 
   setProgress(fraction: number, label: string): void {

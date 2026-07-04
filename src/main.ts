@@ -239,9 +239,12 @@ function enableGyro(): void {
     if (granted) {
       gyroSource.start();
       controls.setGyroEnabled(true);
-      controls.setGyroStatus('Gyroscope on — tap Calibrate while holding the phone naturally');
     } else {
       controls.setGyroEnabled(false);
+      // The only status message left -- unlike the calibrate-instructions text this
+      // replaced (now just the Calibrate button's own "Uncalibrated"/"Recalibrate"
+      // label, see controls.ts), there's no button whose own label already conveys
+      // "permission was denied," so this still needs to be said explicitly.
       controls.setGyroStatus('Tap "Gyroscope: Off" to allow motion access');
     }
   });
@@ -302,7 +305,6 @@ const controls = new Controls(
     },
     onCalibrateGyro: () => {
       gyroSource.calibrateZero();
-      controls.setGyroStatus('Calibrated');
     },
   },
   mode
