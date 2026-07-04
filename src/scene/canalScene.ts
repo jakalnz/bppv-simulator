@@ -10,7 +10,7 @@ import {
   S_MAX,
   S_COMMON_CRUS,
 } from '../physics/canal';
-import { Quat, normalize, quatInvert, rotateVec } from '../physics/types';
+import { Quat, normalize, quatInvert, rotateVec, v3 } from '../physics/types';
 import { G_WORLD } from '../physics/params';
 import {
   toThreeVector3,
@@ -107,6 +107,22 @@ const CAMERA_FIT_MARGIN = 1.12;
 // -- so the farthest visible point is closer to ~2x CANAL_RADIUS_M from the origin, not
 // 1.5x (confirmed against the live app: 1.5x clipped the cupula/ring badly).
 const BASIC_STYLE_FIT_RADIUS = CANAL_RADIUS_M * 2.3;
+
+// Orientation gizmo (see buildGizmo/renderGizmo) -- a small always-visible axis triad,
+// rendered in its own scene/camera into a corner viewport of the SAME canvas/renderer
+// (the standard "navigation cube" technique used by Blender/CAD/ParaView viewports),
+// labeling anterior/posterior/superior/inferior/lateral/medial. Added directly because
+// of user confusion after the camera-side fix above: the view being from a fixed lateral
+// aspect (rather than, say, always-anterior) wasn't obvious without a label, and a plain
+// static text title would go stale the moment the canal tumbles in "world" gravity mode
+// -- this rotates WITH the anatomy every frame instead, so it stays correct.
+const GIZMO_SIZE_PX = 84;
+const GIZMO_MARGIN_PX = 8;
+const GIZMO_AXIS_LENGTH = 1;
+const GIZMO_CAMERA_DISTANCE = 3;
+const GIZMO_COLOR_AP = 0xd9756a;
+const GIZMO_COLOR_SI = 0x6aa8d9;
+const GIZMO_COLOR_LATMED = 0x6ad98a;
 
 const CLOT_RADIUS_SCENE = CANAL_RADIUS_M * 0.28;
 const DUCT_TUBE_RADIUS_SCENE = CANAL_RADIUS_M * 0.22;
@@ -296,6 +312,17 @@ export class CanalScene {
     debrisOnUtricularSide: false,
   };
 
+  // Orientation gizmo -- see GIZMO_SIZE_PX's doc comment. A separate scene/camera (not a
+  // child of canalGroup/scene) so it can be drawn into its own small corner viewport of
+  // the same canvas independently of the main render's camera/target/zoom.
+  private readonly gizmoScene = new THREE.Scene();
+  private readonly gizmoCamera = new THREE.OrthographicCamera(-1.4, 1.4, 1.4, -1.4, 0.1, 10);
+  private readonly gizmoGroup = new THREE.Group();
+  // The lateral/medial axis pair depends on selector.side (mirrored, unlike A/P/S/I which
+  // are the same for both ears) -- rebuilt via updateGizmoLateralAxis whenever the side
+  // changes, so this holds the currently-live one to remove before rebuilding.
+  private gizmoLateralAxis: THREE.Group | null = null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
     this.updateCameraForStyle();
@@ -377,9 +404,122 @@ export class CanalScene {
     );
     this.scene.add(this.gravityArrow);
 
+    this.buildGizmo();
+
     this.repositionForCanal();
     this.applyStyle();
     this.loadRealAnatomy();
+  }
+
+  /**
+   * Builds the orientation gizmo's static A/P/S/I axis pair (same for both ears) and
+   * positions its (fixed-distance, never-zoomed) camera -- see GIZMO_SIZE_PX's doc
+   * comment. The lateral/medial pair is side-dependent, so it's built separately by
+   * updateGizmoLateralAxis (called from repositionForCanal, once selector.side is known/
+   * current).
+   */
+  private buildGizmo(): void {
+    const anteriorDir = toThreeVector3(v3(1, 0, 0));
+    const superiorDir = toThreeVector3(v3(0, 0, 1));
+    this.gizmoGroup.add(this.makeGizmoAxisPair(anteriorDir, 'A', 'P', GIZMO_COLOR_AP));
+    this.gizmoGroup.add(this.makeGizmoAxisPair(superiorDir, 'S', 'I', GIZMO_COLOR_SI));
+    this.gizmoScene.add(this.gizmoGroup);
+    this.updateGizmoLateralAxis();
+  }
+
+  /**
+   * (Re)builds the lateral/medial axis pair for the CURRENT selector.side -- unlike A/P/S/I,
+   * this one is mirrored across the sagittal plane (HeadFrame's left/right axis, same as
+   * CANAL_PLANE_NORMAL/mirrorAcrossSagittal in physics/canal.ts): the lateral direction is
+   * away from the midline, which is +Y (left) for the left ear and -Y (right) for the
+   * right ear. Called from repositionForCanal (selector.side is current there), not just
+   * once in buildGizmo, since switching ears must re-point this pair without touching the
+   * side-independent A/P/S/I pair.
+   */
+  private updateGizmoLateralAxis(): void {
+    if (this.gizmoLateralAxis) {
+      this.gizmoGroup.remove(this.gizmoLateralAxis);
+    }
+    const lateralHead = this.selector.side === 'left' ? v3(0, 1, 0) : v3(0, -1, 0);
+    const lateralDir = toThreeVector3(lateralHead);
+    this.gizmoLateralAxis = this.makeGizmoAxisPair(lateralDir, 'Lat', 'Med', GIZMO_COLOR_LATMED);
+    this.gizmoGroup.add(this.gizmoLateralAxis);
+  }
+
+  /** One bidirectional axis line plus its two end labels, for the orientation gizmo. */
+  private makeGizmoAxisPair(dir: THREE.Vector3, posLabel: string, negLabel: string, color: number): THREE.Group {
+    const group = new THREE.Group();
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      dir.clone().multiplyScalar(-GIZMO_AXIS_LENGTH),
+      dir.clone().multiplyScalar(GIZMO_AXIS_LENGTH),
+    ]);
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color }));
+    group.add(line);
+    const posSprite = this.makeGizmoLabel(posLabel, color);
+    posSprite.position.copy(dir.clone().multiplyScalar(GIZMO_AXIS_LENGTH * 1.3));
+    group.add(posSprite);
+    const negSprite = this.makeGizmoLabel(negLabel, color);
+    negSprite.position.copy(dir.clone().multiplyScalar(-GIZMO_AXIS_LENGTH * 1.3));
+    group.add(negSprite);
+    return group;
+  }
+
+  /** Text sprite (canvas-texture billboard) for one gizmo axis-end label. */
+  private makeGizmoLabel(text: string, color: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(0.9, 0.45, 1);
+    return sprite;
+  }
+
+  /**
+   * Draws the orientation gizmo into a small corner viewport of the SAME canvas/renderer,
+   * after the main scene render -- the standard technique (Blender/CAD viewport nav
+   * cubes) for an inset that doesn't need its own canvas element. Two things must track
+   * the main view every frame, not just once: gizmoGroup's rotation mirrors canalGroup's
+   * current rotation (so it reflects "world" gravity mode's tumbling, and stays fixed in
+   * "head" mode where canalGroup itself stays fixed), and gizmoCamera's rotation mirrors
+   * the main camera's rotation (so the mini triad's on-screen layout always matches what
+   * the main viewport is actually looking at, including the per-side lateral/medial
+   * camera flip from updateCameraForStyle) -- only gizmoCamera's fixed DISTANCE differs
+   * from the main camera, since the gizmo has its own small orthographic frustum.
+   */
+  private renderGizmo(): void {
+    this.gizmoGroup.quaternion.copy(this.canalGroup.quaternion);
+    this.gizmoCamera.quaternion.copy(this.camera.quaternion);
+    this.gizmoCamera.position
+      .copy(new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion))
+      .multiplyScalar(GIZMO_CAMERA_DISTANCE);
+
+    const canvas = this.renderer.domElement;
+    const cssWidth = canvas.clientWidth;
+    const cssHeight = canvas.clientHeight;
+    // setViewport/setScissor take the SAME "logical" (CSS-pixel) units as setSize, not
+    // raw drawing-buffer pixels -- three.js applies the renderer's pixel ratio internally.
+    const size = Math.max(0, Math.min(GIZMO_SIZE_PX, cssWidth * 0.3, cssHeight * 0.3));
+    const x = cssWidth - size - GIZMO_MARGIN_PX;
+    const y = cssHeight - size - GIZMO_MARGIN_PX; // three.js viewport/scissor origin is bottom-left
+
+    this.renderer.setScissorTest(true);
+    this.renderer.setScissor(x, y, size, size);
+    this.renderer.setViewport(x, y, size, size);
+    // Depth only -- the main render's color buffer should show through around/behind the
+    // gizmo's own small square, only that square's own depth needs resetting so the
+    // gizmo's axis lines/labels aren't depth-tested against the (unrelated) main scene.
+    this.renderer.clearDepth();
+    this.renderer.render(this.gizmoScene, this.gizmoCamera);
+    this.renderer.setScissorTest(false);
+    this.renderer.setViewport(0, 0, cssWidth, cssHeight);
   }
 
   /**
@@ -634,6 +774,7 @@ export class CanalScene {
     // function samples the real duct.
     this.updateAssemblyTransform();
     this.updateActiveCanalHighlight();
+    this.updateGizmoLateralAxis();
 
     this.cupulaElevation = this.computeCupulaElevation(this.selector.canal, this.selector.side);
     this.cupulaMembrane.position.copy(this.ductPosition(0)).add(this.cupulaElevation);
@@ -944,5 +1085,6 @@ export class CanalScene {
     // sphere (see realAnatomyBoundingSphere's doc comment).
     this.updateCameraForStyle();
     this.renderer.render(this.scene, this.camera);
+    this.renderGizmo();
   }
 }

@@ -41,7 +41,13 @@ map_Bump textures/Eye_N.jpg
 newmtl Eye_white
 Ns 550.955445
 Ka 1.000000 1.000000 1.000000
-Kd 0.412973 0.412973 0.412973
+# Kd raised from the source-file value (0.412973 -- a near-50% darkening multiplier
+# applied on top of the already-dim baked Eye_D.jpg texture) to brighten the sclera and
+# give the vein/speckle detail in that same texture more headroom to read against a
+# less crushed-dark background. Kd is a straight multiplier on the shared map_Kd texture
+# (see the file header: this Eye_white material is the only one whose region is the
+# visible sclera), so this only affects the sclera, not the iris/pupil materials below.
+Kd 0.850000 0.850000 0.850000
 Ks 0.627027 0.627027 0.627027
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
