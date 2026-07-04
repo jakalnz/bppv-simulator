@@ -131,6 +131,7 @@ export class Controls {
     );
 
     this.playBtn = document.createElement('button');
+    this.playBtn.className = 'primary-btn';
     this.playBtn.textContent = 'Play';
     this.playBtn.addEventListener('click', () => {
       if (this.playBtn.textContent === 'Play') {

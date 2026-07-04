@@ -4,38 +4,45 @@
 
 /* Default (dark) palette -- also explicitly selectable via data-theme="dark" (see
  * ui/theme.ts), which lets the light override below use a plain attribute selector
- * rather than needing :not([data-theme="light"]) everywhere. */
+ * rather than needing :not([data-theme="light"]) everywhere.
+ *
+ * Accent is calcite amber (--accent), not an arbitrary UI blue -- pulled from the same
+ * family as the otoconia-clot legend swatch (#c9a227, see index.html), since otoconia
+ * ("ear rocks", displaced calcium carbonate crystals) is the actual pathology this whole
+ * simulator exists to visualize. Background carries a faint teal-black cast rather than
+ * neutral navy -- vestibular exams (Dix-Hallpike, VNG) are conventionally run in a
+ * darkened room, which this is standing in for. */
 :root,
 :root[data-theme='dark'] {
-  --bg: #0f1116;
-  --panel: #1a1d24;
-  --panel-header: #20232b;
-  --border: #2c3038;
-  --border-soft: #333844;
-  --text: #e8e8ec;
-  --text-dim: #9aa4b2;
-  --text-faint: #6f7889;
-  --accent: #5b9bd5;
-  --accent-hover: #6faee2;
-  --radius: 10px;
-  --radius-sm: 7px;
-  --overlay: rgba(20, 22, 28, 0.95);
+  --bg: #0a0e0d;
+  --panel: #141a17;
+  --panel-header: #1a211d;
+  --border: #262e29;
+  --border-soft: #333d36;
+  --text: #e9ece9;
+  --text-dim: #98a49b;
+  --text-faint: #66766a;
+  --accent: #d9a441;
+  --accent-hover: #e8b65c;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --overlay: rgba(16, 20, 18, 0.95);
 }
 
 :root[data-theme='light'] {
-  --bg: #eef0f3;
+  --bg: #f5f2ea;
   --panel: #ffffff;
-  --panel-header: #f2f4f7;
-  --border: #dde1e7;
-  --border-soft: #c7ccd4;
-  --text: #1b1e24;
-  --text-dim: #565f6c;
-  --text-faint: #7c8494;
-  --accent: #3a7cc4;
-  --accent-hover: #3370b3;
-  --radius: 10px;
-  --radius-sm: 7px;
-  --overlay: rgba(255, 255, 255, 0.97);
+  --panel-header: #f7f2e6;
+  --border: #e2dac8;
+  --border-soft: #ccc1a6;
+  --text: #201c14;
+  --text-dim: #5c5343;
+  --text-faint: #8a8071;
+  --accent: #b8791f;
+  --accent-hover: #a06a1a;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --overlay: rgba(255, 253, 248, 0.97);
 }
 
 html,
@@ -79,12 +86,22 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* Instrument-label treatment: tracked uppercase mono, the same face already used for
+ * the debug readout -- reused here for every panel title instead of only the numeric
+ * debug line, so headers read like equipment nomenclature (VNG/oscilloscope labeling)
+ * rather than generic app card titles. */
+.vng-header h2,
+.view-panel h2 {
+  font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .vng-header h2 {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-dim);
-  letter-spacing: 0.01em;
 }
 
 .vng-legend {
@@ -196,7 +213,7 @@ body {
 .view-panel h2 {
   margin: 0;
   padding: 6px 10px;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-dim);
   background: var(--panel-header);
@@ -206,7 +223,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  letter-spacing: 0.01em;
 }
 
 .inline-toggle {
@@ -233,17 +249,52 @@ body {
   min-height: 0;
 }
 
-/* Positioning context for the "cleared" toast (see .cleared-toast) -- separate from
- * .view-panel--canal itself so the toast can anchor to the CANVAS's own top edge
- * regardless of the header's height (1 or 2 lines depending on wrap/breakpoint). */
-.canal-canvas-wrap {
+/* Shared wrap around every view canvas (eye/canal/head) -- gives each canvas its own
+ * positioning context, separate from the panel's header, so overlays anchor to the
+ * CANVAS's own edges regardless of the header's height (1 or 2 lines depending on
+ * wrap/breakpoint). Canal additionally keeps its own .canal-canvas-wrap class for the
+ * "cleared into utricle" toast, which only exists on that one panel. */
+.canvas-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.canal-canvas-wrap canvas {
+.canvas-wrap canvas {
   flex: none;
+}
+
+/* Signature motif: a scope-reticle corner tick on each view canvas, in the accent
+ * color -- these three canvases are the thing being "read" like an instrument display
+ * (nystagmus off the eye, the clot's position off the canal, orientation off the head),
+ * so the accent used for the primary Play action reappears here as "this is a live
+ * readout," not just a card of content. Anchored to the canvas wrap (not the panel), so
+ * it sits over the model, never behind the opaque header/legend. Two opposite corners
+ * only (top-left/bottom-right), thin and short, so it stays a quiet accent rather than
+ * a busy frame. */
+.canvas-wrap::before,
+.canvas-wrap::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.55;
+}
+
+.canvas-wrap::before {
+  top: 6px;
+  left: 6px;
+  border-top: 1.5px solid var(--accent);
+  border-left: 1.5px solid var(--accent);
+}
+
+.canvas-wrap::after {
+  bottom: 6px;
+  right: 6px;
+  border-bottom: 1.5px solid var(--accent);
+  border-right: 1.5px solid var(--accent);
 }
 
 /* Celebratory banner shown once when the otoconia clot settles in the utricle (see
@@ -369,15 +420,18 @@ body {
 }
 
 /* Play is the primary action in the transport group -- give it a distinct accent so
- * it reads as the "main button" at a glance instead of blending into Reset/Reset clot. */
-#controls .control-group:first-child button:first-child {
+ * it reads as the "main button" at a glance instead of blending into Reset/Reset clot.
+ * (Was a structural :first-child selector that never actually matched the real DOM --
+ * Play rendered as a plain button. An explicit class is unambiguous regardless of how
+ * the surrounding control groups get reshuffled.) */
+#controls .primary-btn {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0b1420;
+  color: #14100a;
   font-weight: 600;
 }
 
-#controls .control-group:first-child button:first-child:hover {
+#controls .primary-btn:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }

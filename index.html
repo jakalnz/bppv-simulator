@@ -19,7 +19,9 @@
       <div id="views">
         <div class="view-panel view-panel--eye">
           <h2>Eye (nystagmus)</h2>
-          <canvas id="eye-canvas"></canvas>
+          <div class="canvas-wrap">
+            <canvas id="eye-canvas"></canvas>
+          </div>
         </div>
         <div class="view-panel view-panel--canal">
           <h2>
@@ -35,7 +37,7 @@
             </select>
             <button id="canal-about-pill" class="about-pill" type="button">About</button>
           </h2>
-          <div class="canal-canvas-wrap">
+          <div class="canal-canvas-wrap canvas-wrap">
             <canvas id="canal-canvas"></canvas>
             <div id="canal-cleared-toast" class="cleared-toast" hidden>👍 Cleared into the utricle</div>
             <div id="canal-reentered-toast" class="cleared-toast cleared-toast--warning" hidden>
@@ -52,7 +54,9 @@
         </div>
         <div class="view-panel view-panel--head">
           <h2>Head position</h2>
-          <canvas id="head-canvas"></canvas>
+          <div class="canvas-wrap">
+            <canvas id="head-canvas"></canvas>
+          </div>
         </div>
       </div>
       <div class="vng-panel">
