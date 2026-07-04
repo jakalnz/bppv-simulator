@@ -60,7 +60,7 @@ export class Controls {
   // the current mode (see updateModeVisibility), rather than always showing every
   // control regardless of relevance.
   private readonly maneuverGroup: HTMLDivElement;
-  private readonly maneuverLabelRow: HTMLDivElement;
+  private readonly scrubColumn: HTMLDivElement;
   private readonly gyroGroup: HTMLDivElement;
   private scrubbing = false;
   private gyroEnabled = false;
@@ -265,6 +265,15 @@ export class Controls {
     this.debug = document.createElement('pre');
     this.debug.className = 'debug-readout';
 
+    // The scrub range input's own track is thin, leaving spare vertical space above it
+    // within the row's full height (set by the taller select/Play button next to it) --
+    // stacking the position label directly above the scrub bar in its own column uses
+    // that already-there whitespace instead of costing a whole extra row's height the
+    // way a row below the group would.
+    this.scrubColumn = document.createElement('div');
+    this.scrubColumn.className = 'scrub-column';
+    this.scrubColumn.append(this.label, this.scrub);
+
     // Play/scrub/maneuver-select: only meaningful in "maneuver" mode (there's no
     // scripted position to play or scrub through otherwise) -- grouped on one line so
     // they read as a single "maneuver playback" unit, and shown/hidden as a whole (see
@@ -272,15 +281,7 @@ export class Controls {
     // other two modes.
     this.maneuverGroup = document.createElement('div');
     this.maneuverGroup.className = 'control-group';
-    this.maneuverGroup.append(this.maneuverSelect, this.playBtn, this.scrub);
-
-    // The current waypoint's position label (e.g. "Seated upright") used to sit crammed
-    // inline after the scrub bar -- moved to its own row below now that the context row
-    // consolidation (BPPV Variant/Mode/Reset) freed up enough height to afford a third
-    // row here without it costing the views anything above.
-    this.maneuverLabelRow = document.createElement('div');
-    this.maneuverLabelRow.className = 'control-row maneuver-label-row';
-    this.maneuverLabelRow.append(this.label);
+    this.maneuverGroup.append(this.maneuverSelect, this.playBtn, this.scrubColumn);
 
     // Gyroscope on/off + calibrate: only meaningful in "gyro" mode.
     this.gyroGroup = document.createElement('div');
@@ -317,7 +318,7 @@ export class Controls {
     playbackRow.className = 'control-row';
     playbackRow.append(this.maneuverGroup, this.gyroGroup, this.debug);
 
-    container.append(contextRow, playbackRow, this.maneuverLabelRow);
+    container.append(contextRow, playbackRow);
   }
 
   /**
@@ -388,7 +389,6 @@ export class Controls {
 
   private updateModeVisibility(mode: PlaybackMode): void {
     this.maneuverGroup.style.display = mode === 'maneuver' ? '' : 'none';
-    this.maneuverLabelRow.style.display = mode === 'maneuver' ? '' : 'none';
     this.gyroGroup.style.display = mode === 'gyro' ? '' : 'none';
     // "Reset debris" (onResetClot) exists specifically for mouse-drag/gyro modes, where
     // there's no scripted maneuver position to reset otherwise -- see its own doc

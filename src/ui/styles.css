@@ -517,9 +517,27 @@ body {
 }
 
 #controls input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* Position label stacked directly above the scrub bar (see controls.ts's scrubColumn)
+ * -- the range input's own track is thin, leaving spare vertical space above it within
+ * the row's full height (set by the taller select/Play button beside it), so the label
+ * fits there for free instead of costing a whole extra row's height. */
+.scrub-column {
+  display: flex;
   flex: 1 1 160px;
   min-width: 120px;
-  accent-color: var(--accent);
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.scrub-column span {
+  font-size: 0.72em;
+  color: var(--text-dim);
+  line-height: 1.2;
 }
 
 /* flex-wrap explicitly nowrap (not just relying on the flex default) -- each
@@ -672,10 +690,8 @@ body {
    * contextRow/playbackRow) now sets a predictable height from its own content instead
    * of an unpredictable wrap, so it no longer needs as much headroom reserved for a
    * worst-case wrap, and the scrollbar is a rare fallback rather than a routine outcome.
-   * Raised back up slightly (12vh -> 14vh) now that maneuver mode routinely adds a third
-   * row (the position label, see controls.ts's maneuverLabelRow) -- otherwise that row
-   * was clipped behind the scrollbar on every short phone screen instead of the rare
-   * fallback it's meant to be. */
+   * (The position label stacks above the scrub bar instead of adding a third row -- see
+   * .scrub-column -- so this stays capped at two rows' worth of height.) */
   #controls {
     position: sticky;
     bottom: 0;
@@ -683,7 +699,7 @@ body {
     padding: 5px 8px;
     gap: 3px;
     font-size: 0.78rem;
-    max-height: 14vh;
+    max-height: 12vh;
     overflow-y: auto;
   }
 
