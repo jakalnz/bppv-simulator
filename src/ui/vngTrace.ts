@@ -49,9 +49,18 @@ export class VngTrace {
     }
     const ctx = this.ctx;
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#12151a';
+    // Reads the current theme fresh every frame (cheap: a single dataset read) rather
+    // than caching it, so a mid-session theme toggle (see ui/theme.ts) is reflected on
+    // the very next frame -- these colors are drawn directly onto the canvas, not CSS,
+    // so they don't otherwise pick up the toggle at all.
+    const isLight = document.documentElement.dataset.theme === 'light';
+    ctx.fillStyle = isLight ? '#f3f4f6' : '#12151a';
     ctx.fillRect(0, 0, width, height);
     if (width === 0 || height === 0) return;
+
+    const gridStrong = isLight ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.28)';
+    const gridWeak = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
+    const gridLabel = isLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.4)';
 
     const t0 = nowSeconds - WINDOW_SECONDS;
     const xForT = (t: number) => ((t - t0) / WINDOW_SECONDS) * width;
@@ -64,19 +73,19 @@ export class VngTrace {
       const y = yForDeg(deg);
       const isZero = deg === 0;
       const isLabeled = deg % LABELED_GRIDLINE_STEP_DEG === 0;
-      ctx.strokeStyle = isZero ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.08)';
+      ctx.strokeStyle = isZero ? gridStrong : gridWeak;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
       if (isLabeled && !isZero) {
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillStyle = gridLabel;
         ctx.fillText(`${deg}°`, 4, y - 2);
       }
     }
 
     // Vertical gridlines every second.
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = gridWeak;
     for (let s = Math.ceil(t0); s <= nowSeconds; s++) {
       const x = xForT(s);
       ctx.beginPath();

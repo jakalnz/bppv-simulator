@@ -2,7 +2,11 @@
   box-sizing: border-box;
 }
 
-:root {
+/* Default (dark) palette -- also explicitly selectable via data-theme="dark" (see
+ * ui/theme.ts), which lets the light override below use a plain attribute selector
+ * rather than needing :not([data-theme="light"]) everywhere. */
+:root,
+:root[data-theme='dark'] {
   --bg: #0f1116;
   --panel: #1a1d24;
   --panel-header: #20232b;
@@ -15,6 +19,23 @@
   --accent-hover: #6faee2;
   --radius: 10px;
   --radius-sm: 7px;
+  --overlay: rgba(20, 22, 28, 0.95);
+}
+
+:root[data-theme='light'] {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --panel-header: #f2f4f7;
+  --border: #dde1e7;
+  --border-soft: #c7ccd4;
+  --text: #1b1e24;
+  --text-dim: #565f6c;
+  --text-faint: #7c8494;
+  --accent: #3a7cc4;
+  --accent-hover: #3370b3;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --overlay: rgba(255, 255, 255, 0.97);
 }
 
 html,
@@ -114,7 +135,7 @@ body {
 .about-popover {
   position: fixed;
   z-index: 20;
-  background: rgba(20, 22, 28, 0.97);
+  background: var(--overlay);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -235,7 +256,7 @@ body {
   left: 50%;
   max-width: 90%;
   transform: translateX(-50%) translateY(-6px);
-  background: rgba(20, 22, 28, 0.92);
+  background: var(--overlay);
   border: 1px solid #3f9d5f;
   color: #a8e8bb;
   border-radius: 999px;
@@ -255,6 +276,17 @@ body {
 .cleared-toast--warning {
   border-color: #c97a2e;
   color: #f0c896;
+}
+
+/* The light-on-dark toast text (#a8e8bb/#f0c896 above) has poor contrast against
+ * --overlay's near-white light-theme background -- darker, more saturated variants
+ * for readability there, same green/amber identity. */
+:root[data-theme='light'] .cleared-toast {
+  color: #1f7a3f;
+}
+
+:root[data-theme='light'] .cleared-toast--warning {
+  color: #9a5416;
 }
 
 .cleared-toast.show {
@@ -375,6 +407,12 @@ body {
   opacity: 0.85;
 }
 
+/* #8fd6a0 (a light terminal-green tuned for a dark background) has poor contrast
+ * against --panel's near-white light-theme background -- a darker green instead. */
+:root[data-theme='light'] .debug-readout {
+  color: #1f7a3f;
+}
+
 /*
  * Mobile: portrait phones don't have the width for a 2fr/1fr side-by-side split, and
  * vertical space is the scarce resource (not horizontal) -- so Eye keeps the top, but
@@ -471,4 +509,46 @@ body {
     flex-basis: 100%;
     font-size: 0.62rem;
   }
+}
+
+/* Floating theme toggle -- always bottom-right, above everything else (including the
+ * mobile sticky controls bar it may sit over), same fixed position/size on every
+ * breakpoint since it's a small, self-contained control, not part of the responsive
+ * grid. The inner icon (a circle split solid black/white) is a fixed, theme-INDEPENDENT
+ * "contrast" glyph -- it represents the toggle action itself, not the current state, so
+ * it deliberately doesn't recolor with --text/--panel the way everything else here does. */
+.theme-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+
+.theme-toggle:active {
+  transform: scale(0.96);
+}
+
+.theme-toggle-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.6px solid #14161a;
+  background: linear-gradient(90deg, #14161a 50%, #fdfdfd 50%);
 }

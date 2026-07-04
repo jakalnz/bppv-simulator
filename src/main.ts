@@ -29,14 +29,18 @@ import { HeadScene } from './scene/headScene';
 import { Controls, ManeuverKey, PlaybackMode } from './ui/controls';
 import { VngTrace } from './ui/vngTrace';
 import { keepScreenAwake } from './ui/wakeLock';
+import { initTheme, toggleTheme } from './ui/theme';
 
 keepScreenAwake();
+initTheme();
 
 const eyeCanvas = document.getElementById('eye-canvas') as HTMLCanvasElement;
 const canalCanvas = document.getElementById('canal-canvas') as HTMLCanvasElement;
 const headCanvas = document.getElementById('head-canvas') as HTMLCanvasElement;
 const vngCanvas = document.getElementById('vng-canvas') as HTMLCanvasElement;
 const controlsContainer = document.getElementById('controls') as HTMLDivElement;
+const themeToggleBtn = document.getElementById('theme-toggle') as HTMLButtonElement;
+themeToggleBtn.addEventListener('click', () => toggleTheme());
 
 const eyeScene = new EyeScene(eyeCanvas);
 const canalScene = new CanalScene(canalCanvas);
