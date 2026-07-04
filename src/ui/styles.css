@@ -384,9 +384,16 @@ body {
   accent-color: var(--accent);
 }
 
+/* flex-wrap explicitly nowrap (not just relying on the flex default) -- each
+ * control-group is one atomic item within #controls's own wrapping row (#controls has
+ * flex-wrap: wrap), so when a group doesn't fit on the current line it moves to the next
+ * line AS A WHOLE, never splitting its own children (e.g. maneuverGroup's select/Play/
+ * scrub/position-label) across two lines independently. Being explicit here guards that
+ * property against a future edit accidentally adding wrapping inside a group. */
 .control-group {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 

@@ -106,16 +106,17 @@ export class Controls {
       (side) => callbacks.onSelectSide(side)
     );
 
-    const debrisSideSelect = document.createElement('select');
-    debrisSideSelect.innerHTML = `
-      <option value="canal">Debris: canal-side</option>
-      <option value="utricular">Debris: utricular-side</option>
-    `;
-    // Only meaningful for cupulolithiasis -- see CanalSelector.debrisOnUtricularSide.
-    debrisSideSelect.style.display = 'none';
-    debrisSideSelect.addEventListener('change', () =>
-      callbacks.onSelectDebrisSide(debrisSideSelect.value === 'utricular')
+    // Same two-values-only reasoning as canalToggle/sideToggle above.
+    const debrisSideToggle = this.makeToggleButton<'canal' | 'utricular'>(
+      [
+        { value: 'canal', label: 'Debris: canal-side' },
+        { value: 'utricular', label: 'Debris: utricular-side' },
+      ],
+      'canal',
+      (value) => callbacks.onSelectDebrisSide(value === 'utricular')
     );
+    // Only meaningful for cupulolithiasis -- see CanalSelector.debrisOnUtricularSide.
+    debrisSideToggle.style.display = 'none';
 
     const pathologyToggle = this.makeToggleButton<Pathology>(
       [
@@ -124,7 +125,7 @@ export class Controls {
       ],
       'canalithiasis',
       (pathology) => {
-        debrisSideSelect.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
+        debrisSideToggle.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
         callbacks.onSelectPathology(pathology);
       }
     );
@@ -231,7 +232,7 @@ export class Controls {
       sideToggle,
       canalToggle,
       pathologyToggle,
-      debrisSideSelect,
+      debrisSideToggle,
       alwaysGroup,
       this.maneuverGroup,
       this.gyroGroup,
@@ -269,6 +270,11 @@ export class Controls {
   private updateModeVisibility(mode: PlaybackMode): void {
     this.maneuverGroup.style.display = mode === 'maneuver' ? '' : 'none';
     this.gyroGroup.style.display = mode === 'gyro' ? '' : 'none';
+    // "Reset debris" (onResetClot) exists specifically for mouse-drag/gyro modes, where
+    // there's no scripted maneuver position to reset otherwise -- see its own doc
+    // comment. In "maneuver" mode, "Reset all" already resets the debris/cupula physics
+    // alongside the maneuver position, so this button is pure redundant clutter there.
+    this.resetClotBtn.style.display = mode === 'maneuver' ? 'none' : '';
   }
 
   private updateGyroToggleLabel(): void {
