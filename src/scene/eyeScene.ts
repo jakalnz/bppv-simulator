@@ -116,6 +116,18 @@ function createScleraTexture(): THREE.CanvasTexture {
  * iris) is what users are meant to see, and is loaded in immediately. The procedural
  * version only becomes visible as a defensive fallback if that load fails.
  */
+// Phone-sized screens get a closer camera (see EYE_CAMERA_DISTANCE) so the eye reads at
+// ~1.5x its desktop size within the same (smaller) panel -- requested after the
+// nystagmus rotation was hard to see at the phone layout's default eye-panel size.
+// Cropping the sclera's top/bottom (a wider-than-tall panel loses more vertically than
+// horizontally when zoomed) was explicitly accepted as the tradeoff: the iris/pupil and
+// the vein cues around them (the actual rotation cues) matter far more than seeing the
+// whole sphere. Same breakpoint as main.ts's IS_MOBILE_SCREEN/styles.css's mobile media
+// query -- checked once at construction, not re-evaluated on resize/rotate, matching how
+// IS_MOBILE_SCREEN itself is a one-time check.
+const IS_MOBILE_SCREEN = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
+const EYE_CAMERA_DISTANCE = IS_MOBILE_SCREEN ? 5 / 1.5 : 5;
+
 export class EyeScene {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(35, 1, 0.1, 10);
@@ -125,7 +137,7 @@ export class EyeScene {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
-    this.camera.position.set(0, 0, 5);
+    this.camera.position.set(0, 0, EYE_CAMERA_DISTANCE);
     this.camera.lookAt(0, 0, 0);
     this.scene.add(...makeAmbientAndKeyLight());
 

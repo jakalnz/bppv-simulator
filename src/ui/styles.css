@@ -497,30 +497,41 @@ body {
   /* max-height capped tighter than an earlier 34vh -- on a short phone screen that was
    * eating a third of the viewport on its own, at the model view's expense. Controls
    * still scroll internally (overflow-y) if they don't all fit, rather than pushing the
-   * views up further. */
+   * views up further. Tightened further (was 22vh) after the eye view was reported still
+   * too small on phones -- the debug readout below is now hidden entirely on mobile (it
+   * was a whole extra full-width row of developer diagnostics, not information a phone
+   * user needs), and button/select sizing here is a bit more compact, both freeing up
+   * vertical space for #views (which #controls and #views split, #views getting whatever
+   * #controls doesn't use -- see #app's flex layout) without shrinking tap targets below
+   * a reasonable minimum.
+   */
   #controls {
     position: sticky;
     bottom: 0;
     z-index: 5;
-    padding: 6px 8px;
-    gap: 5px;
+    padding: 5px 8px;
+    gap: 4px;
     font-size: 0.78rem;
-    max-height: 22vh;
+    max-height: 16vh;
     overflow-y: auto;
   }
 
-  /* Touch targets: buttons/selects get taller tap areas on touch screens. */
+  /* Touch targets: buttons/selects get taller tap areas on touch screens -- still a
+   * comfortable size (36px), just no longer the desktop-plus-padding of the pre-toggle-
+   * button layout, which this compacted control bar no longer needs (see the two-value
+   * selects that became toggle buttons: ear/canal/pathology/debris-side). */
   #controls button,
   #controls select {
-    padding: 9px 12px;
-    font-size: 0.8rem;
-    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 0.76rem;
+    min-height: 36px;
   }
 
+  /* Developer diagnostic readout (s/beta/eye-angle/etc) -- useful on desktop, but on
+   * phones it was a whole extra full-width row (flex-basis:100%) purely for numbers a
+   * phone user isn't reading, at the direct expense of the views above. */
   .debug-readout {
-    margin-left: 0;
-    flex-basis: 100%;
-    font-size: 0.62rem;
+    display: none;
   }
 }
 
