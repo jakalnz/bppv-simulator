@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { updateVor, initialVorState } from './vor';
+import { updateVor, initialVorState, decomposeEyeMovement } from './vor';
+import { CanalSelector } from './canal';
 
 describe('VOR quick-phase nystagmus', () => {
   it('zero cupula deflection produces no drift', () => {
@@ -43,5 +44,36 @@ describe('VOR quick-phase nystagmus', () => {
     }
     expect(posteriorState.eyeAngle).toBeGreaterThan(0);
     expect(horizontalState.eyeAngle).toBeLessThan(0);
+  });
+});
+
+describe('decomposeEyeMovement left/right sign consistency', () => {
+  // Clinically, posterior canal BPPV is upbeating-torsional regardless of which ear is
+  // affected -- so for the SAME (canal-local, ampullofugal-positive) eyeAngle, the
+  // vertical component must come out the SAME sign for both ears, while the torsional
+  // component (which beats toward the affected ear) must FLIP sign between ears. Before
+  // eyeRotationSenseSign was applied in decomposeEyeMovement, it was the other way
+  // around (torsional matched, vertical flipped) -- this pins down the fix.
+  it('posterior canal: vertical component matches across ears, torsional flips', () => {
+    const right: CanalSelector = { canal: 'posterior', side: 'right', pathology: 'canalithiasis', debrisOnUtricularSide: false };
+    const left: CanalSelector = { canal: 'posterior', side: 'left', pathology: 'canalithiasis', debrisOnUtricularSide: false };
+    const eyeAngle = 0.3114658022397432; // representative slow-phase deflection
+    const compsRight = decomposeEyeMovement(eyeAngle, right);
+    const compsLeft = decomposeEyeMovement(eyeAngle, left);
+    expect(Math.sign(compsRight.verticalDeg)).toBe(Math.sign(compsLeft.verticalDeg));
+    expect(Math.sign(compsRight.torsionalDeg)).not.toBe(Math.sign(compsLeft.torsionalDeg));
+  });
+
+  // Horizontal canal BPPV roll test: rolling the affected ear down produces nystagmus
+  // beating toward that (undermost) ear -- so testing the right canal rolled right-down
+  // and the left canal rolled left-down must produce OPPOSITE-signed horizontal
+  // components (each beats toward its own down ear), not identical ones.
+  it('horizontal canal: horizontal component flips between ears own-ear-down', () => {
+    const right: CanalSelector = { canal: 'horizontal', side: 'right', pathology: 'canalithiasis', debrisOnUtricularSide: false };
+    const left: CanalSelector = { canal: 'horizontal', side: 'left', pathology: 'canalithiasis', debrisOnUtricularSide: false };
+    const eyeAngle = -0.19764197883553852; // representative slow-phase deflection
+    const compsRight = decomposeEyeMovement(eyeAngle, right);
+    const compsLeft = decomposeEyeMovement(eyeAngle, left);
+    expect(Math.sign(compsRight.horizontalDeg)).not.toBe(Math.sign(compsLeft.horizontalDeg));
   });
 });

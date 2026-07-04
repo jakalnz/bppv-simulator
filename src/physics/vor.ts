@@ -1,5 +1,5 @@
 import { GAIN_VOR, INHIBITORY_GAIN_FRACTION, QUICK_PHASE_THRESHOLD, QUICK_PHASE_RESET_AMOUNT } from './params';
-import { AMPULLOFUGAL_IS_EXCITATORY, CANAL_PLANE_NORMAL, CanalSelector } from './canal';
+import { AMPULLOFUGAL_IS_EXCITATORY, CANAL_PLANE_NORMAL, CanalSelector, eyeRotationSenseSign } from './canal';
 import { RAD2DEG } from './types';
 
 export interface VorState {
@@ -76,12 +76,20 @@ export interface EyeMovementComponents {
  * ear separately (see the sign tests in canalith.test.ts) rather than assumed to carry
  * over, since a mirrored canal normal doesn't preserve orientation/sign conventions
  * automatically.
+ *
+ * eyeAngle is corrected by eyeRotationSenseSign before being combined with the plane
+ * normal -- see that function's comment in canal.ts for why: without it, this produced
+ * IDENTICAL horizontal-nystagmus direction for both ears' own-ear-down roll-test
+ * position (verified numerically), which contradicts mirrored anatomy, and it also
+ * silently swapped which posterior-canal component (vertical vs torsional) correctly
+ * stays same-signed across ears vs which one should flip.
  */
 export function decomposeEyeMovement(eyeAngle: number, selector: CanalSelector): EyeMovementComponents {
   const n = CANAL_PLANE_NORMAL[selector.canal][selector.side]; // HeadFrame: [X anterior, Y left, Z superior]
+  const angle = eyeAngle * eyeRotationSenseSign(selector.canal, selector.side);
   return {
-    torsionalDeg: eyeAngle * n[0] * RAD2DEG,
-    verticalDeg: eyeAngle * n[1] * RAD2DEG,
-    horizontalDeg: eyeAngle * n[2] * RAD2DEG,
+    torsionalDeg: angle * n[0] * RAD2DEG,
+    verticalDeg: angle * n[1] * RAD2DEG,
+    horizontalDeg: angle * n[2] * RAD2DEG,
   };
 }

@@ -159,6 +159,27 @@ const BASE_HANDEDNESS_USES_E1_CROSS_N: Record<CanalType, boolean> = {
   horizontal: false,
 };
 
+/**
+ * Sign correction for canalBasis's per-(canal, side) handedness choice above, needed
+ * when converting the "s"-based (duct-local, ampullofugal-positive) eye-rotation
+ * accumulator in vor.ts into an actual rotation about the shared
+ * CANAL_PLANE_NORMAL[canal][side] axis. Increasing s traces cos(s)*e1 + sin(s)*e2, so
+ * it's a rotation about e1 x e2 -- which equals +n when e2 = n x e1 (a standard
+ * right-handed (e1, e2, n) set), but equals -n when e2 = e1 x n instead (that flips the
+ * cross product, so e1 x e2 = -n). Without correcting for this, decomposeEyeMovement
+ * would combine the SAME-signed eyeAngle with a plane normal that (for the horizontal
+ * canal especially, whose normal barely changes sign between ears) is nearly identical
+ * between left and right, producing near-identical eye-movement direction for both
+ * ears' own-ear-down provoking position -- which can't be right, since mirrored anatomy
+ * must produce mirrored (or at least side-dependent) nystagmus direction. See
+ * BASE_HANDEDNESS_USES_E1_CROSS_N above for why this handedness differs per (canal, side).
+ */
+export function eyeRotationSenseSign(canal: CanalType, side: EarSide): 1 | -1 {
+  const rightUsesE1CrossN = BASE_HANDEDNESS_USES_E1_CROSS_N[canal];
+  const useE1CrossN = side === 'right' ? rightUsesE1CrossN : !rightUsesE1CrossN;
+  return useE1CrossN ? 1 : -1;
+}
+
 function canalBasis(selector: CanalSelector): CanalBasis {
   const { canal, side } = selector;
   const cached = cachedBases[canal]?.[side];
