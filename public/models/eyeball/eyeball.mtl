@@ -17,7 +17,11 @@ map_Kd textures/Eye_D.jpg
 newmtl Eye_Iris
 Ns 17.647059
 Ka 1.000000 1.000000 1.000000
-Kd 0.035281 0.125983 0.299100
+# Kd changed from the source-file value (0.035281 0.125983 0.299100, a dark blue) to a
+# green-blue/teal per request. Note: this material sits UNDER the Eye_Tranz.001 cornea
+# overlay (see that material's own comment) and isn't visible on its own in the rendered
+# eye, but is kept in sync anyway in case that overlay's opacity/blending ever changes.
+Kd 0.050000 0.280000 0.260000
 Ks 1.000000 1.000000 1.000000
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
@@ -29,7 +33,12 @@ map_Bump textures/Eye_N.jpg
 newmtl Eye_Tranz.001
 Ns 705.413990
 Ka 1.000000 1.000000 1.000000
-Kd 0.607568 0.607568 0.607568
+# This is the CORNEA overlay mesh (a transparent dome layered over the iris/pupil,
+# see eyeball.obj's "eyeball_1.003" object group) -- it's the material actually visible
+# on screen for the iris region, not Eye_Iris below it (confirmed by test-tinting each
+# material separately and checking the live render: only this one's Kd shows through).
+# Kd changed from the source-file value (0.607568 grey) to a green-blue/teal per request.
+Kd 0.140000 0.360000 0.340000
 Ks 0.439189 0.439189 0.439189
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000

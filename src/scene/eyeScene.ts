@@ -148,7 +148,7 @@ export class EyeScene {
 
     const iris = new THREE.Mesh(
       new THREE.CircleGeometry(0.42, 40),
-      new THREE.MeshStandardMaterial({ color: 0x3d6f95 })
+      new THREE.MeshStandardMaterial({ color: 0x2f8f80 }) // green-blue/teal, matching the realistic model's cornea tint
     );
     iris.position.z = IRIS_Z;
     this.proceduralParts.add(iris);
