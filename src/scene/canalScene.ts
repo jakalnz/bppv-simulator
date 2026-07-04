@@ -89,11 +89,24 @@ function mirrorForSide(v: THREE.Vector3, side: 'left' | 'right'): THREE.Vector3 
   return side === 'left' ? new THREE.Vector3(v.x, v.y, -v.z) : v.clone();
 }
 
-// Camera framing per style -- "realistic" keeps the original whole-labyrinth-context
-// distance; "detailed" zooms in on the canal of interest (the whole point of switching
-// to "detailed" is to inspect it closely). "basic" reuses the realistic framing.
+// Camera framing per style -- "detailed" zooms in on the canal of interest (the whole
+// point of switching to "detailed" is to inspect it closely), a static distance that's
+// already been confirmed to look right and isn't touched by the dynamic fit below.
+// DEFAULT_CAMERA_POS is now only a fallback (before the real anatomy mesh has finished
+// loading, see computeBoundingSphereInfo) and the source of the fixed tilt angle
+// -- "realistic"/"basic" no longer use it directly, see updateCameraForStyle.
 const DEFAULT_CAMERA_POS = { y: CANAL_RADIUS_M * 2.2, z: CANAL_RADIUS_M * 9.5 };
 const DETAILED_CAMERA_POS = { y: CANAL_RADIUS_M * 1.0, z: CANAL_RADIUS_M * 4.2 };
+// Slack beyond the exact bounding sphere so the model doesn't touch the canvas edge --
+// tuned by eye against the live app, not derived.
+const CAMERA_FIT_MARGIN = 1.12;
+// "basic" style's fit radius (see updateCameraForStyle) -- the idealized duct circle
+// itself has radius CANAL_RADIUS_M, but the cupula membrane sits well outside that bare
+// ring: elevated off it by ~0.475*CANAL_RADIUS_M (cupulaElevation's own magnitude, see
+// that method) plus its own rendered radius (CUPULA_RADIUS_SCENE = ~0.53*CANAL_RADIUS_M)
+// -- so the farthest visible point is closer to ~2x CANAL_RADIUS_M from the origin, not
+// 1.5x (confirmed against the live app: 1.5x clipped the cupula/ring badly).
+const BASIC_STYLE_FIT_RADIUS = CANAL_RADIUS_M * 2.3;
 
 const CLOT_RADIUS_SCENE = CANAL_RADIUS_M * 0.28;
 const DUCT_TUBE_RADIUS_SCENE = CANAL_RADIUS_M * 0.22;
@@ -207,6 +220,13 @@ export class CanalScene {
   // like the earlier version. Only the currently-selected canal's real centerline drives
   // the physics-linked debris/cupula markers (see ductPosition/ductTangent).
   private readonly labyrinthAssembly = new THREE.Group();
+  // Cached once after loadRealAnatomy resolves (see computeBoundingSphereInfo) -- the
+  // geometry itself never changes after loading (canal switching only re-tints/
+  // re-highlights, doesn't add or remove meshes), so this doesn't need recomputing per
+  // frame, only the camera distance/target derived from it (cheap trig + one rotation)
+  // does, whenever the canvas aspect ratio or head orientation changes. null before the
+  // mesh has loaded, see updateCameraForStyle's fallback.
+  private realAnatomyBoundingSphere: { center: THREE.Vector3; radius: number } | null = null;
   private readonly realCenterlineCurves: Record<string, THREE.CatmullRomCurve3> = {};
   // Continuation of the duct centerline PAST S_COMMON_CRUS, into the common crus and on
   // to the utricle -- so a fully-cleared clot (e.g. after a completed Epley) visibly
@@ -425,6 +445,7 @@ export class CanalScene {
     await loadInto(EAR_ANATOMY.utricleMesh, UTRICLE_GLASS);
     await loadInto(EAR_ANATOMY.sacculeMesh, SACCULE_GLASS);
 
+    this.realAnatomyBoundingSphere = this.computeBoundingSphereInfo(this.labyrinthAssembly);
     this.applyStyle();
     this.repositionForCanal();
   }
@@ -690,16 +711,101 @@ export class CanalScene {
   }
 
   /**
-   * "detailed" zooms the camera in on the canal of interest; "basic"/"realistic" keep
-   * the original whole-labyrinth-context framing. Both keep looking at world origin
-   * (0,0,0) -- the physics-driven duct group is always centered near there by
-   * construction (canalPosition(0) is only CANAL_RADIUS_M from origin), so this doesn't
-   * need to track the selected canal's exact position, just move the camera closer.
+   * "detailed" zooms the camera in on the canal of interest -- a static distance,
+   * unchanged here, since it's already confirmed to look right and isn't about fitting
+   * the WHOLE labyrinth (the "basic"/"realistic" case below).
+   *
+   * "realistic" fits the camera distance to the actual rendered geometry's bounding
+   * sphere (realAnatomyBoundingSphere, the whole loaded labyrinth) and the canvas's
+   * CURRENT aspect ratio -- computed fresh every call (cheap: just trig + one vector
+   * rotation on an already-cached sphere, see that field's doc comment) rather than a
+   * single fixed distance tuned for one assumed aspect. A static distance necessarily
+   * undershoots (too zoomed out) or overshoots (clips off-screen) once the canvas stops
+   * being roughly square -- which it does constantly here, between the desktop side
+   * panel's landscape-ish shape and a narrow mobile portrait screen. Fitting per-frame
+   * from the real aspect means it's always AS ZOOMED IN AS POSSIBLE without clipping,
+   * in every orientation, rather than a single guessed compromise value.
+   *
+   * "basic" does NOT reuse that same labyrinth sphere -- it only ever shows the single
+   * idealized duct circle (labyrinthAssembly is hidden, see applyStyle), a small, fixed
+   * shape independent of canal/side (canalPosition/canalTangent always sweep a circle of
+   * radius CANAL_RADIUS_M about the origin). Reusing the full labyrinth's (much larger)
+   * bounding sphere here was tried and confirmed wrong against the live app -- it fit
+   * the camera to content that isn't even visible in "basic", leaving the small ring
+   * tiny in a mostly-empty frame. BASIC_STYLE_FIT_RADIUS is a fixed multiple of
+   * CANAL_RADIUS_M instead, generous enough to include the cupula bulge/clot cluster
+   * that sit slightly outside the bare ring.
+   *
+   * Both "basic" and "realistic" look at their own sphere's CENTER, not unconditionally
+   * world origin (0,0,0) -- checked against the live app for "realistic": the whole
+   * labyrinth's centroid sits ~3.4mm off the physics origin (pulled that way by the
+   * utricle/saccule, which extend further than the canal loops themselves), so fitting a
+   * sphere anchored at the origin instead of the cluster's own center was measuring
+   * distance-to-farthest-corner-from-a-point-that-isn't-the-middle -- a real, needlessly
+   * conservative overestimate (by roughly 40%) of the radius actually needed. ("basic"'s
+   * own circle IS centered at the origin by construction, so its target ends up being
+   * (0,0,0) regardless -- the shared codepath isn't wrong for it, just not doing
+   * anything extra there.) The center, in canalGroup's LOCAL (unrotated) frame, is
+   * re-rotated by canalGroup's CURRENT quaternion each call so the look-at target
+   * correctly tracks the cluster's true centroid as the canal tumbles in "world" gravity
+   * mode (see applyGravityMode) -- canalGroup itself only ever rotates about world
+   * origin, never translates, so this single rotation is enough to place the target
+   * correctly without re-measuring.
    */
   private updateCameraForStyle(): void {
-    const target = this.style === 'detailed' ? DETAILED_CAMERA_POS : DEFAULT_CAMERA_POS;
-    this.camera.position.set(0, target.y, target.z);
-    this.camera.lookAt(0, 0, 0);
+    if (this.style === 'detailed') {
+      this.camera.position.set(0, DETAILED_CAMERA_POS.y, DETAILED_CAMERA_POS.z);
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+    const vFov = THREE.MathUtils.degToRad(this.camera.fov);
+    let rawRadius: number;
+    let target: THREE.Vector3;
+    if (this.style === 'basic') {
+      rawRadius = BASIC_STYLE_FIT_RADIUS;
+      target = new THREE.Vector3();
+    } else {
+      // Fallback before loadRealAnatomy resolves: back-derive an equivalent radius from
+      // the old fixed DEFAULT_CAMERA_POS distance (at fov/2's tangent), centered at the
+      // origin (no real geometry to measure a true center from yet).
+      const fallbackRadius = DEFAULT_CAMERA_POS.z * Math.tan(vFov / 2);
+      const sphere = this.realAnatomyBoundingSphere;
+      rawRadius = sphere?.radius ?? fallbackRadius;
+      target = sphere ? sphere.center.clone().applyQuaternion(this.canalGroup.quaternion) : new THREE.Vector3();
+    }
+    const radius = rawRadius * CAMERA_FIT_MARGIN;
+
+    const aspect = this.camera.aspect > 0 ? this.camera.aspect : 1;
+    const distanceForVertical = radius / Math.tan(vFov / 2);
+    const distanceForHorizontal = radius / (Math.tan(vFov / 2) * aspect);
+    const distance = Math.max(distanceForVertical, distanceForHorizontal);
+
+    // Preserve the same gentle elevated viewing angle as the old fixed framing (ratio
+    // of its y-offset to its z-distance), scaled to the new computed distance, offset
+    // from the (rotating) target rather than from world origin directly.
+    const tiltRatio = DEFAULT_CAMERA_POS.y / DEFAULT_CAMERA_POS.z;
+    this.camera.position.set(target.x, target.y + distance * tiltRatio, target.z + distance);
+    this.camera.lookAt(target);
+  }
+
+  /**
+   * Bounding sphere of an object's geometry, in canalGroup's LOCAL (unrotated) frame:
+   * canalGroup's own quaternion (the only thing that rotates per-frame, in "world"
+   * gravity mode -- see applyGravityMode) is temporarily reset to identity first, since
+   * an axis-aligned Box3 computed while rotated would give a rotation-dependent (and
+   * generally larger, "diagonal") extent, not the object's true fixed shape. Restored
+   * immediately after measuring. See updateCameraForStyle for how the returned center
+   * gets re-rotated back into the current frame each time it's used.
+   */
+  private computeBoundingSphereInfo(object: THREE.Object3D): { center: THREE.Vector3; radius: number } {
+    const savedQuat = this.canalGroup.quaternion.clone();
+    this.canalGroup.quaternion.identity();
+    this.canalGroup.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(object);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    this.canalGroup.quaternion.copy(savedQuat);
+    this.canalGroup.updateWorldMatrix(true, true);
+    return { center: sphere.center, radius: sphere.radius };
   }
 
   /**
@@ -820,6 +926,12 @@ export class CanalScene {
 
   render(): void {
     resizeRendererToDisplaySize(this.renderer, this.camera);
+    // Re-fit every frame, not just on style switch -- resizeRendererToDisplaySize above
+    // may have just changed camera.aspect (window resize, orientation change, mobile
+    // breakpoint), and updateCameraForStyle's "basic"/"realistic" branch depends on that
+    // current aspect. Cheap: no geometry traversal, just trig on an already-cached
+    // sphere (see realAnatomyBoundingSphere's doc comment).
+    this.updateCameraForStyle();
     this.renderer.render(this.scene, this.camera);
   }
 }

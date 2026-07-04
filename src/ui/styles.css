@@ -133,13 +133,16 @@ body {
  * Desktop layout: Eye is the primary diagnostic view, given the most space; Canal and
  * Head are secondary reference views, stacked in a narrower side column (canal over
  * head) rather than three equal-width columns -- the eye is what you actually read
- * nystagmus off, the other two are context.
+ * nystagmus off, the other two are context. Within that side column, Canal gets more
+ * of the shared height than Head (1.6fr vs 1fr) -- the otoconia clot/cupula/duct detail
+ * needs more room to stay legible than the head orientation indicator does, which is
+ * only ever a coarse "which way is it tilted" glance.
  */
 #views {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 1.7fr 1.3fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: 1.6fr 1fr;
   grid-template-areas:
     'eye canal'
     'eye head';
@@ -407,10 +410,13 @@ body {
   /* On mobile the CANAL view (not Eye) gets the large top slot -- the otoconia clot is
    * small and needs to be tracked as it moves through the duct, which is illegible when
    * squashed into the small paired-row slot Eye gets on desktop. Eye moves down into
-   * that smaller paired row instead, alongside Head. */
+   * that smaller paired row instead, alongside Head. Canal's share of the two rows
+   * (3fr vs 1fr, up from 2.1fr) was bumped further after the model still read as too
+   * small on phones -- combined with the shrunk VNG panel and controls bar below, this
+   * gives the canal view most of the screen's actual vertical space. */
   #views {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: minmax(0, 2.1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
     grid-template-areas:
       'canal canal'
       'eye head';
@@ -437,14 +443,18 @@ body {
     font-size: 0.6rem;
   }
 
+  /* max-height capped tighter than an earlier 34vh -- on a short phone screen that was
+   * eating a third of the viewport on its own, at the model view's expense. Controls
+   * still scroll internally (overflow-y) if they don't all fit, rather than pushing the
+   * views up further. */
   #controls {
     position: sticky;
     bottom: 0;
     z-index: 5;
-    padding: 8px;
-    gap: 6px;
+    padding: 6px 8px;
+    gap: 5px;
     font-size: 0.78rem;
-    max-height: 34vh;
+    max-height: 22vh;
     overflow-y: auto;
   }
 
