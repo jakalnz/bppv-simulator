@@ -325,11 +325,20 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   font-size: 0.85rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* One deliberate row of controls (context toggles, or playback/transport) -- see
+ * controls.ts's contextRow/playbackRow. Wraps internally if its own content is too
+ * wide for the container, but never bleeds into the other row's line. */
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Pill-shaped (fully rounded), same visual language as .about-pill -- but same
@@ -466,7 +475,12 @@ body {
    * small on phones -- combined with the shrunk VNG panel and controls bar below, this
    * gives the canal view most of the screen's actual vertical space. */
   #views {
-    grid-template-columns: 1fr 1fr;
+    /* Eye/Head split their shared row unevenly (was 1fr 1fr) -- Head is just a coarse
+     * tilt glance, so giving it less width lets Eye (what nystagmus is actually read
+     * off) grow without touching the canal row's own share, which is what sets the
+     * canal model's on-screen size (see canalScene.ts's updateCameraForStyle -- it
+     * fits the model tightly to whatever canvas space its row/column gives it). */
+    grid-template-columns: 1.7fr 1fr;
     grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
     grid-template-areas:
       'canal canal'
@@ -475,18 +489,26 @@ body {
   }
 
   .view-panel h2 {
-    font-size: 0.68rem;
-    padding: 5px 8px;
+    font-size: 0.66rem;
+    padding: 4px 8px;
   }
 
   .inline-toggle {
-    font-size: 0.64rem;
-    padding: 2px 6px;
+    font-size: 0.62rem;
+    padding: 1px 5px;
   }
 
+  /* Canal panel's own chrome (header above, legend below) is pure DOM overhead around
+   * the canvas -- shrinking it hands the freed height straight to the canvas, and the
+   * fit-to-frame camera (see canalScene.ts) uses it, growing the model rather than
+   * leaving dead space. Legend condensed to a single non-wrapping scrollable strip so
+   * it can't cost a second line here the way it could on desktop. */
   .canal-legend {
-    font-size: 0.58rem;
-    padding: 4px 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    font-size: 0.56rem;
+    padding: 3px 6px;
+    gap: 8px;
   }
 
   .about-pill {
@@ -505,26 +527,35 @@ body {
    * #controls doesn't use -- see #app's flex layout) without shrinking tap targets below
    * a reasonable minimum.
    */
+  /* max-height dropped from 16vh -- the two-row structure (see controls.ts's
+   * contextRow/playbackRow) now sets a predictable height from its own content instead
+   * of an unpredictable wrap, so it no longer needs as much headroom reserved for a
+   * worst-case wrap, and the scrollbar is a rare fallback rather than a routine outcome. */
   #controls {
     position: sticky;
     bottom: 0;
     z-index: 5;
     padding: 5px 8px;
-    gap: 4px;
+    gap: 3px;
     font-size: 0.78rem;
-    max-height: 16vh;
+    max-height: 12vh;
     overflow-y: auto;
   }
 
+  .control-row {
+    gap: 4px;
+  }
+
   /* Touch targets: buttons/selects get taller tap areas on touch screens -- still a
-   * comfortable size (36px), just no longer the desktop-plus-padding of the pre-toggle-
+   * comfortable size (34px), just no longer the desktop-plus-padding of the pre-toggle-
    * button layout, which this compacted control bar no longer needs (see the two-value
-   * selects that became toggle buttons: ear/canal/pathology/debris-side). */
+   * selects that became toggle buttons: ear/canal/pathology/debris-side). Trimmed from
+   * 36px alongside the row restructure, still a reasonable tap target. */
   #controls button,
   #controls select {
-    padding: 7px 10px;
-    font-size: 0.76rem;
-    min-height: 36px;
+    padding: 6px 9px;
+    font-size: 0.74rem;
+    min-height: 34px;
   }
 
   /* Developer diagnostic readout (s/beta/eye-angle/etc) -- useful on desktop, but on

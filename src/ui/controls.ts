@@ -228,16 +228,20 @@ export class Controls {
 
     this.updateModeVisibility(initialMode);
 
-    container.append(
-      sideToggle,
-      canalToggle,
-      pathologyToggle,
-      debrisSideToggle,
-      alwaysGroup,
-      this.maneuverGroup,
-      this.gyroGroup,
-      this.debug
-    );
+    // Two explicit rows (context toggles, then playback/transport) instead of letting
+    // eight independent flex items wrap wherever they happen to fit -- that produced an
+    // unpredictable ragged layout that ate more height than the content needed. Grouping
+    // by row means each row's own content sets its height, and the row always breaks in
+    // the same place regardless of container width.
+    const contextRow = document.createElement('div');
+    contextRow.className = 'control-row';
+    contextRow.append(sideToggle, canalToggle, pathologyToggle, debrisSideToggle);
+
+    const playbackRow = document.createElement('div');
+    playbackRow.className = 'control-row';
+    playbackRow.append(alwaysGroup, this.maneuverGroup, this.gyroGroup, this.debug);
+
+    container.append(contextRow, playbackRow);
   }
 
   /**
