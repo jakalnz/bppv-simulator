@@ -38,6 +38,60 @@ const REALISTIC_EYE_OBJ_URL = resolveAssetUrl(
 // no extra rotation is needed, only centering and a scale to match SCLERA_RADIUS.
 const REALISTIC_EYE_RADIUS = 1.95;
 
+const SCLERA_DIFFUSE_URL = resolveAssetUrl(
+  '/models/eyeball/textures/Eye_D.jpg',
+  import.meta.env.BASE_URL,
+  window.location.origin
+);
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+/**
+ * The baked sclera diffuse texture (Eye_D.jpg) has its vein streaks at only a subtle
+ * reddish tint against the near-white sclera -- low contrast, reported hard to read.
+ * Rather than darkening the whole texture (a uniform multiplier, e.g. the "Eye_white"
+ * material's Kd, would dim the veins and the white sclera by the same proportion,
+ * leaving their relative contrast unchanged), this re-processes just the reddish
+ * (vein-colored) pixels: redness is measured as red minus the green/blue average, and
+ * pixels above a threshold are darkened by an amount proportional to how reddish they
+ * are, while near-white/near-gray pixels are left alone. That widens the actual
+ * light/dark gap between veins and sclera instead of just dimming everything together.
+ */
+async function createContrastBoostedScleraTexture(): Promise<THREE.CanvasTexture> {
+  const img = await loadImage(SCLERA_DIFFUSE_URL);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const redness = r - (g + b) / 2;
+    if (redness > 5) {
+      const factor = Math.max(0.22, 1 - redness / 70);
+      data[i] = r * factor;
+      data[i + 1] = g * factor;
+      data[i + 2] = b * factor;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /**
  * Procedural vein/speckle texture for the sclera. The iris spokes and tick mark alone
  * only give landmarks over a small central patch -- most of the visible sphere surface
@@ -58,7 +112,7 @@ function createScleraTexture(): THREE.CanvasTexture {
   ctx.fillStyle = '#f2ece2';
   ctx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = 'rgba(185, 108, 98, 0.32)';
+  ctx.strokeStyle = 'rgba(130, 40, 34, 0.55)';
   ctx.lineWidth = 1.4;
   for (let i = 0; i < 140; i++) {
     let x = Math.random() * width;
@@ -230,6 +284,28 @@ export class EyeScene {
       const loader = new OBJLoader();
       loader.setMaterials(materials);
       const obj = await loader.loadAsync(REALISTIC_EYE_OBJ_URL);
+
+      // Only the sclera ("Eye_white") material's map is swapped -- the iris/cornea
+      // materials share the same source texture but for a different visible region, and
+      // aren't part of the vein-contrast complaint this is addressing.
+      try {
+        const boostedSclera = await createContrastBoostedScleraTexture();
+        obj.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          for (const mat of materials) {
+            // MTLLoader builds THREE.MeshPhongMaterial instances (not MeshStandardMaterial)
+            // -- checked against its source rather than assumed, since matching the wrong
+            // material class here would silently no-op instead of erroring.
+            if (mat instanceof THREE.MeshPhongMaterial && mat.name === 'Eye_white') {
+              mat.map = boostedSclera;
+              mat.needsUpdate = true;
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('Sclera contrast boost failed; using the unmodified baked texture.', err);
+      }
 
       const box = new THREE.Box3().setFromObject(obj);
       const center = box.getCenter(new THREE.Vector3());
