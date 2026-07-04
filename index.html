@@ -8,17 +8,6 @@
   </head>
   <body>
     <div id="app">
-      <div class="vng-panel">
-        <div class="vng-header">
-          <h2>VNG trace (10s window)</h2>
-          <div class="vng-legend">
-            <span><span class="swatch" style="background:#e2534a"></span>Horizontal</span>
-            <span><span class="swatch" style="background:#4caf6b"></span>Vertical</span>
-            <span><span class="swatch" style="background:#4a90d9"></span>Torsional</span>
-          </div>
-        </div>
-        <canvas id="vng-canvas"></canvas>
-      </div>
       <div id="canal-about-popover" class="about-popover" hidden>
         Semicircular canal/ampulla/utricle geometry from the
         <strong>IE-Map</strong> in-vivo inner-ear atlas: Ahmadi, S.-A., Raiser, T. M.,
@@ -34,7 +23,7 @@
         </div>
         <div class="view-panel view-panel--canal">
           <h2>
-            <span id="canal-panel-title">Posterior canal</span> (cutaway)
+            <span id="canal-panel-title">Posterior canal</span>
             <select id="canal-style-select" class="inline-toggle">
               <option value="basic">Basic</option>
               <option value="realistic" selected>Realistic</option>
@@ -58,7 +47,6 @@
             <div><span class="swatch" style="background:#4aa3e0"></span>Anterior duct</div>
             <div><span class="swatch" style="background:#5fd17a"></span>Horizontal duct</div>
             <div><span class="swatch" style="background:#c9a227"></span><span id="legend-clot-label">Otoconia clot</span></div>
-            <div><span class="swatch" style="background:#2ec4c6"></span>Cupula (ampulla, s=0)</div>
             <div id="legend-gravity"><span class="swatch" style="background:#7fa8d9"></span>Gravity</div>
           </div>
         </div>
@@ -66,6 +54,17 @@
           <h2>Head position</h2>
           <canvas id="head-canvas"></canvas>
         </div>
+      </div>
+      <div class="vng-panel">
+        <div class="vng-header">
+          <h2>VNG trace (10s window)</h2>
+          <div class="vng-legend">
+            <span><span class="swatch" style="background:#e2534a"></span>Horizontal</span>
+            <span><span class="swatch" style="background:#4caf6b"></span>Vertical</span>
+            <span><span class="swatch" style="background:#4a90d9"></span>Torsional</span>
+          </div>
+        </div>
+        <canvas id="vng-canvas"></canvas>
       </div>
       <div id="controls"></div>
     </div>

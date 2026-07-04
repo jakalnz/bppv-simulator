@@ -67,6 +67,10 @@ export class HeadScene {
     this.addEye(0.22, 0.08); // subject's left eye (HeadFrame +Z-ish side)
     this.addEye(-0.22, 0.08); // subject's right eye
 
+    // Hidden until proven needed -- the realistic model is the one users should see by
+    // default; this only becomes visible if loadRealisticHead's catch below fires (a
+    // real load failure), not while it's still in flight.
+    this.proceduralParts.visible = false;
     this.scene.add(this.headGroup);
     this.loadRealisticHead();
   }
@@ -90,10 +94,10 @@ export class HeadScene {
   }
 
   /**
-   * Loads the realistic head scan (see docs/model ideas.txt) and swaps it in for the
-   * procedural sphere/nose once ready. Falls back to leaving the procedural head visible
-   * if the model fails to load (offline, asset missing, parse error, etc.) -- this is a
-   * defensive fallback, not a user-facing toggle.
+   * Loads the realistic head scan (see docs/model ideas.txt). The procedural sphere/nose
+   * built in the constructor stays hidden the whole time this is in flight -- it only
+   * becomes visible if this fails (offline, asset missing, parse error, etc.), as a
+   * defensive fallback, not a "loading placeholder" users are meant to see.
    */
   private async loadRealisticHead(): Promise<void> {
     try {
@@ -120,9 +124,9 @@ export class HeadScene {
       wrapper.scale.setScalar(1.0 / longestAxis);
 
       this.headGroup.add(wrapper);
-      this.proceduralParts.visible = false;
     } catch (err) {
       console.warn('Realistic head model failed to load; using procedural fallback.', err);
+      this.proceduralParts.visible = true;
     }
   }
 

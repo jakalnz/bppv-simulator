@@ -110,10 +110,11 @@ function createScleraTexture(): THREE.CanvasTexture {
  * component is mixed in, matching how clinicians actually read torsional nystagmus (as
  * rotation of the iris pattern around the pupil, not tilt of the whole eye).
  *
- * Starts with a procedural eyeball (radial iris spokes + a full ring of limbus ticks,
- * needed because a plain solid-colored iris/pupil rotated about its own center looks
- * identical at any angle) and swaps in a realistic model with a real photographic iris
- * once it loads, falling back to the procedural one if loading fails.
+ * Builds a procedural eyeball (radial iris spokes + a full ring of limbus ticks, needed
+ * because a plain solid-colored iris/pupil rotated about its own center looks identical
+ * at any angle) but keeps it hidden by default -- the realistic model (real photographic
+ * iris) is what users are meant to see, and is loaded in immediately. The procedural
+ * version only becomes visible as a defensive fallback if that load fails.
  */
 export class EyeScene {
   readonly scene = new THREE.Scene();
@@ -130,6 +131,10 @@ export class EyeScene {
 
     this.buildProceduralEye();
     this.eyeGroup.add(this.proceduralParts);
+    // Hidden until proven needed -- the realistic model is the one users should see by
+    // default; this only becomes visible if loadRealisticEye's catch below fires (a real
+    // load failure), not while it's still in flight.
+    this.proceduralParts.visible = false;
     this.scene.add(this.eyeGroup);
     this.loadRealisticEye();
   }
@@ -223,9 +228,9 @@ export class EyeScene {
       wrapper.scale.setScalar(SCLERA_RADIUS / REALISTIC_EYE_RADIUS);
 
       this.eyeGroup.add(wrapper);
-      this.proceduralParts.visible = false;
     } catch (err) {
       console.warn('Realistic eyeball model failed to load; using procedural fallback.', err);
+      this.proceduralParts.visible = true;
     }
   }
 
