@@ -29,7 +29,12 @@ export function initialReleaseDetector(): CupulaReleaseDetector {
 export function updateReleaseDetector(
   state: CupulaReleaseDetector,
   angularSpeed: number,
-  dt: number
+  dt: number,
+  // Overridable arm threshold -- main.ts passes INTERACTIVE_RAPID_SPEED_THRESHOLD instead
+  // of the default RAPID_SPEED_THRESHOLD for mouse-drag/gyro sources, since those apply
+  // raw un-paced input deltas where the scripted-maneuver-calibrated default triggers on
+  // ordinary brisk movement -- see INTERACTIVE_RAPID_SPEED_THRESHOLD's own doc comment.
+  rapidSpeedThreshold: number = RAPID_SPEED_THRESHOLD
 ): [CupulaReleaseDetector, boolean] {
   // Clamp BEFORE smoothing -- see MAX_PLAUSIBLE_ANGULAR_SPEED's comment for why smoothing
   // alone isn't sufficient to reject a single-tick input-event-batching artifact.
@@ -38,7 +43,7 @@ export function updateReleaseDetector(
     state.smoothedSpeed + (clampedSpeed - state.smoothedSpeed) * Math.min(1, dt / RELEASE_SPEED_SMOOTHING_TAU);
 
   if (!state.armed) {
-    if (smoothedSpeed > RAPID_SPEED_THRESHOLD) return [{ armed: true, smoothedSpeed }, false];
+    if (smoothedSpeed > rapidSpeedThreshold) return [{ armed: true, smoothedSpeed }, false];
     return [{ ...state, smoothedSpeed }, false];
   }
   if (smoothedSpeed < RELEASE_STOP_SPEED) return [{ armed: false, smoothedSpeed }, true];

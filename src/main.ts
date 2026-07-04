@@ -1,5 +1,11 @@
 import { Quat, quatAngleBetween, quatInvert, rotateVec } from './physics/types';
-import { G_WORLD, LATENCY_SECONDS, ADHERENCE_WINDOW_SECONDS } from './physics/params';
+import {
+  G_WORLD,
+  LATENCY_SECONDS,
+  ADHERENCE_WINDOW_SECONDS,
+  RAPID_SPEED_THRESHOLD,
+  INTERACTIVE_RAPID_SPEED_THRESHOLD,
+} from './physics/params';
 import { CanalithState, initialCanalithState, canalithStateAtAmpulla, updateCanalith, isCleared } from './physics/canalith';
 import { ShortArmPath, ShortArmState, initialShortArmState, updateShortArm } from './physics/shortArmReentry';
 import { updateCupula, relaxOnly } from './physics/cupula';
@@ -358,7 +364,13 @@ function stepPhysicsOnce(dt: number): void {
   const angularSpeed = quatAngleBetween(prevQHeadForVelocity, qHead) / dt;
   prevQHeadForVelocity = qHead;
   let released: boolean;
-  [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, dt);
+  // Interactive sources (mouse-drag/gyro) get a much higher arm threshold than scripted
+  // maneuvers -- see INTERACTIVE_RAPID_SPEED_THRESHOLD's doc comment: the default is
+  // precisely calibrated to each maneuver's own scripted waypoint speeds, but ordinary
+  // brisk interactive movement (no scripted pacing behind it) easily exceeded it,
+  // accidentally converting cupulolithiasis into canalithiasis.
+  const rapidSpeedThreshold = mode === 'maneuver' ? RAPID_SPEED_THRESHOLD : INTERACTIVE_RAPID_SPEED_THRESHOLD;
+  [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, dt, rapidSpeedThreshold);
   if (selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased && released) {
     cupulaDebrisReleased = true;
     // Debris starts its free-floating life at the ampulla (s=0), same convention as

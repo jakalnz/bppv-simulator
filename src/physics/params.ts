@@ -203,6 +203,24 @@ export const CUPULA_GRAVITY_GAIN = 0.08;
 export const RAPID_SPEED_THRESHOLD = 1.3;
 
 /**
+ * Separate (much higher) rapid-speed threshold used ONLY for interactive orientation
+ * sources (mouse-drag/gyro, see main.ts's stepPhysicsOnce) -- RAPID_SPEED_THRESHOLD
+ * itself stays untouched since it's precisely calibrated against every scripted
+ * maneuver's own measured peaks (see that constant's comment/cupulaRelease.test.ts) and
+ * changing it would break that discrimination. Interactive input is a different
+ * situation: mouse-drag applies raw un-throttled pointermove deltas (and gyro raw
+ * device-sensor deltas) directly, with no scripted waypoint pacing behind it, so an
+ * ordinary brisk-but-unintentional head-turn while just exploring the model easily
+ * exceeded 1.3 rad/s (~75 deg/s) and silently converted cupulolithiasis into
+ * canalithiasis -- confirmed as the reported "way too easy to accidentally detach the
+ * cupula" behavior. Raised well above that (~230 deg/s) so only a deliberate, fast
+ * flick/shake -- comparable to Semont-liberatory's own verified rapid transition speed,
+ * see RAPID_SPEED_THRESHOLD's comment -- still triggers release; casual interactive
+ * movement no longer does.
+ */
+export const INTERACTIVE_RAPID_SPEED_THRESHOLD = 4;
+
+/**
  * Once angular speed has exceeded RAPID_SPEED_THRESHOLD, release triggers when it drops
  * back below this (rad/s) -- i.e. the head has now stopped/decelerated after the rapid
  * movement. This is deliberately NOT a raw instantaneous-deceleration threshold: at this
