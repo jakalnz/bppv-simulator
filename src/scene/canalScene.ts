@@ -753,8 +753,19 @@ export class CanalScene {
    * correctly without re-measuring.
    */
   private updateCameraForStyle(): void {
+    // Three's Z axis is the left-right/mirror axis (HeadFrame +Y (left) -> Three -Z, see
+    // HEAD_FRAME_TO_THREE) -- the SAME axis mirrorForSide/labyrinthAssembly's scale.y=-1
+    // mirror the anatomy across. A camera parked at a fixed +Z offset regardless of
+    // selector.side views the right ear from its lateral aspect but the left ear from its
+    // MEDIAL aspect (looking down the very axis being mirrored flips anterior<->posterior
+    // on screen instead of reading as a left-right mirror) -- confirmed against the
+    // anatomy: the underlying geometry (canal.ts's e1/canalBasis, and the mesh mirror)
+    // already mirrors correctly across the sagittal plane, so this was a viewing-angle
+    // bug, not a geometry bug. Flipping the camera's Z offset for the left ear views both
+    // ears from their own lateral aspect, so switching sides reads as a proper mirror.
+    const zSign = this.selector.side === 'left' ? -1 : 1;
     if (this.style === 'detailed') {
-      this.camera.position.set(0, DETAILED_CAMERA_POS.y, DETAILED_CAMERA_POS.z);
+      this.camera.position.set(0, DETAILED_CAMERA_POS.y, DETAILED_CAMERA_POS.z * zSign);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -784,7 +795,7 @@ export class CanalScene {
     // of its y-offset to its z-distance), scaled to the new computed distance, offset
     // from the (rotating) target rather than from world origin directly.
     const tiltRatio = DEFAULT_CAMERA_POS.y / DEFAULT_CAMERA_POS.z;
-    this.camera.position.set(target.x, target.y + distance * tiltRatio, target.z + distance);
+    this.camera.position.set(target.x, target.y + distance * tiltRatio, target.z + distance * zSign);
     this.camera.lookAt(target);
   }
 
