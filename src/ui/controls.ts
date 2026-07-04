@@ -65,11 +65,26 @@ export class Controls {
   private gyroEnabled = false;
 
   constructor(container: HTMLElement, callbacks: ControlsCallbacks, initialMode: PlaybackMode = 'maneuver') {
-    const canalSelect = document.createElement('select');
-    canalSelect.innerHTML = `
-      <option value="posterior">Posterior canal</option>
-      <option value="horizontal">Horizontal canal</option>
-    `;
+    // Ear/pathology/canal each only ever have two possible values right now (anterior
+    // canal isn't modeled yet -- see physics/canal.ts's CanalType), so a single toggle
+    // button that flips between them on each tap is a strictly smaller/faster control
+    // than a 2-option <select> (no dropdown to open, current value always visible without
+    // interaction) -- see makeToggleButton. If/when a third canal type is added, this
+    // should go back to a <select>, since a toggle stops making sense past two options.
+    const canalToggle = this.makeToggleButton<CanalType>(
+      [
+        { value: 'posterior', label: 'Posterior canal' },
+        { value: 'horizontal', label: 'Horizontal canal' },
+      ],
+      'posterior',
+      (canal) => {
+        populateManeuverOptions(canal);
+        callbacks.onSelectCanal(canal);
+        // Changing canal type resets to that canal's first (diagnostic) maneuver, since
+        // the previously-selected maneuver key doesn't apply to the new canal.
+        callbacks.onSelectManeuver(this.maneuverSelect.value as ManeuverKey);
+      }
+    );
 
     this.maneuverSelect = document.createElement('select');
     const populateManeuverOptions = (canal: CanalType): void => {
@@ -82,27 +97,14 @@ export class Controls {
       callbacks.onSelectManeuver(this.maneuverSelect.value as ManeuverKey)
     );
 
-    canalSelect.addEventListener('change', () => {
-      const canal = canalSelect.value as CanalType;
-      populateManeuverOptions(canal);
-      callbacks.onSelectCanal(canal);
-      // Changing canal type resets to that canal's first (diagnostic) maneuver, since
-      // the previously-selected maneuver key doesn't apply to the new canal.
-      callbacks.onSelectManeuver(this.maneuverSelect.value as ManeuverKey);
-    });
-
-    const sideSelect = document.createElement('select');
-    sideSelect.innerHTML = `
-      <option value="right">Right ear</option>
-      <option value="left">Left ear</option>
-    `;
-    sideSelect.addEventListener('change', () => callbacks.onSelectSide(sideSelect.value as EarSide));
-
-    const pathologySelect = document.createElement('select');
-    pathologySelect.innerHTML = `
-      <option value="canalithiasis">Canalithiasis</option>
-      <option value="cupulolithiasis">Cupulolithiasis</option>
-    `;
+    const sideToggle = this.makeToggleButton<EarSide>(
+      [
+        { value: 'right', label: 'Right ear' },
+        { value: 'left', label: 'Left ear' },
+      ],
+      'right',
+      (side) => callbacks.onSelectSide(side)
+    );
 
     const debrisSideSelect = document.createElement('select');
     debrisSideSelect.innerHTML = `
@@ -115,11 +117,17 @@ export class Controls {
       callbacks.onSelectDebrisSide(debrisSideSelect.value === 'utricular')
     );
 
-    pathologySelect.addEventListener('change', () => {
-      const pathology = pathologySelect.value as Pathology;
-      debrisSideSelect.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
-      callbacks.onSelectPathology(pathology);
-    });
+    const pathologyToggle = this.makeToggleButton<Pathology>(
+      [
+        { value: 'canalithiasis', label: 'Canalithiasis' },
+        { value: 'cupulolithiasis', label: 'Cupulolithiasis' },
+      ],
+      'canalithiasis',
+      (pathology) => {
+        debrisSideSelect.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
+        callbacks.onSelectPathology(pathology);
+      }
+    );
 
     this.playBtn = document.createElement('button');
     this.playBtn.textContent = 'Play';
@@ -134,15 +142,16 @@ export class Controls {
     });
 
     const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
+    resetBtn.textContent = 'Reset all';
+    resetBtn.title = 'Reset the maneuver position, head orientation, and otoconia/cupula physics';
     resetBtn.addEventListener('click', () => {
       this.playBtn.textContent = 'Play';
       callbacks.onReset();
     });
 
     this.resetClotBtn = document.createElement('button');
-    this.resetClotBtn.textContent = 'Reset clot';
-    this.resetClotBtn.title = 'Reset the otoconia clot / cupula physics without changing head position';
+    this.resetClotBtn.textContent = 'Reset debris';
+    this.resetClotBtn.title = 'Reset the otoconia debris / cupula physics without changing head position';
     this.resetClotBtn.addEventListener('click', () => callbacks.onResetClot());
 
     this.scrub = document.createElement('input');
@@ -182,8 +191,12 @@ export class Controls {
     this.updateGyroToggleLabel();
 
     this.gyroCalibrateBtn = document.createElement('button');
-    this.gyroCalibrateBtn.textContent = 'Calibrate gyro';
-    this.gyroCalibrateBtn.title = 'Hold the phone naturally, then tap to set this as head-neutral';
+    this.gyroCalibrateBtn.textContent = 'Calibrate';
+    // Callable repeatedly, not just once -- gyroSource.calibrateZero() re-zeroes to
+    // whatever orientation the phone is CURRENTLY in on every tap (see
+    // DeviceOrientationSource.calibrateZero), so a second (or later) press re-centers
+    // the head back to neutral from wherever it's drifted to, same action each time.
+    this.gyroCalibrateBtn.title = 'Hold the phone naturally, then tap to set this as head-neutral (tap again anytime to re-center)';
     this.gyroCalibrateBtn.addEventListener('click', () => callbacks.onCalibrateGyro());
 
     this.gyroStatus = document.createElement('span');
@@ -215,15 +228,42 @@ export class Controls {
     this.updateModeVisibility(initialMode);
 
     container.append(
-      sideSelect,
-      canalSelect,
-      pathologySelect,
+      sideToggle,
+      canalToggle,
+      pathologyToggle,
       debrisSideSelect,
       alwaysGroup,
       this.maneuverGroup,
       this.gyroGroup,
       this.debug
     );
+  }
+
+  /**
+   * A button that cycles through a fixed, small set of values on each click, showing
+   * the CURRENT value as its own label -- used in place of a <select> for controls that
+   * only ever have two options (ear side, pathology, canal type -- see their call sites'
+   * doc comments). Not generalized beyond that here (no visual "which option" indicator
+   * beyond the label text); revisit if a third option is ever added to any of them.
+   */
+  private makeToggleButton<T extends string>(
+    options: { value: T; label: string }[],
+    initial: T,
+    onChange: (value: T) => void
+  ): HTMLButtonElement {
+    const btn = document.createElement('button');
+    let current = initial;
+    const render = (): void => {
+      btn.textContent = options.find((o) => o.value === current)!.label;
+    };
+    render();
+    btn.addEventListener('click', () => {
+      const currentIndex = options.findIndex((o) => o.value === current);
+      current = options[(currentIndex + 1) % options.length].value;
+      render();
+      onChange(current);
+    });
+    return btn;
   }
 
   private updateModeVisibility(mode: PlaybackMode): void {

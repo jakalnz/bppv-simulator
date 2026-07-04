@@ -208,7 +208,7 @@ function enableGyro(): void {
     if (granted) {
       gyroSource.start();
       controls.setGyroEnabled(true);
-      controls.setGyroStatus('Gyroscope on — tap Calibrate gyro while holding the phone naturally');
+      controls.setGyroStatus('Gyroscope on — tap Calibrate while holding the phone naturally');
     } else {
       controls.setGyroEnabled(false);
       controls.setGyroStatus('Tap "Gyroscope: Off" to allow motion access');
@@ -246,6 +246,13 @@ const controls = new Controls(
     onReset: () => {
       maneuverPlayer.reset();
       maneuverPlayer.pause();
+      // In mouse-drag mode, the maneuver player's own position isn't what's driving the
+      // head -- mouseDragSource's accumulated yaw/pitch is -- so resetting only the
+      // (invisible, in this mode) maneuver position left the head visibly still tilted
+      // after a "Reset all" tap. Only mouse mode needs this: gyro's head position comes
+      // from the live sensor, not accumulated state here, so there's nothing analogous to
+      // reset (see onCalibrateGyro for its own re-centering action).
+      if (mode === 'mouse') mouseDragSource.reset();
       resetPhysics();
     },
     onResetClot: () => resetPhysics(),
