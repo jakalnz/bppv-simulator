@@ -65,11 +65,28 @@ interface EarAnatomyData {
 }
 const EAR_ANATOMY = earAnatomyData as unknown as EarAnatomyData;
 
-/** Mirrors a point/direction across the sagittal plane for the left ear -- HeadFrame's
- * left/right axis is Y (+Y = left), matching mirrorAcrossSagittal in physics/canal.ts.
- * The IEMap dataset is right-ear-only; this is how left-ear views are approximated. */
+/**
+ * Mirrors a point/direction across the sagittal plane for the left ear -- but this
+ * operates on vectors that have ALREADY been rotated from HeadFrame into Three's
+ * display space (every call site passes either curve.getPointAt/getTangentAt, built
+ * from anatomy.centerline.map(toThreeVector3), or an inline toThreeVector3(...) result
+ * -- never a raw, unconverted HeadFrame vector). HeadFrame's left/right axis is Y (+Y =
+ * left, matching mirrorAcrossSagittal in physics/canal.ts), but sceneUtils.ts's
+ * HEAD_FRAME_TO_THREE (a -90 degree rotation about the shared X axis) sends HeadFrame
+ * +Y to Three's -Z, not Three's Y -- so mirroring here must flip Z, not Y.
+ *
+ * Flipping Y here (the original implementation) was a real bug: the loaded real-anatomy
+ * MESH itself mirrors correctly for the left ear (labyrinthAssembly's scale.y=-1 in
+ * repositionForCanal is applied BEFORE that same HEAD_FRAME_TO_THREE rotation, in the
+ * mesh's own raw/pre-rotation local space, where Y genuinely is left-right) -- but every
+ * marker riding this function (debris cluster, cupula membrane, short-arm path) was
+ * being mirrored along the wrong (vertical) axis instead, only for the left ear, which
+ * visibly separated them from the correctly-mirrored mesh geometry. Confirmed by
+ * comparing the live app: the right ear's cupula/debris markers sit on the ampulla as
+ * expected, while the left ear's visibly floated away from it before this fix.
+ */
 function mirrorForSide(v: THREE.Vector3, side: 'left' | 'right'): THREE.Vector3 {
-  return side === 'left' ? new THREE.Vector3(v.x, -v.y, v.z) : v.clone();
+  return side === 'left' ? new THREE.Vector3(v.x, v.y, -v.z) : v.clone();
 }
 
 // Camera framing per style -- "realistic" keeps the original whole-labyrinth-context
@@ -81,6 +98,20 @@ const DETAILED_CAMERA_POS = { y: CANAL_RADIUS_M * 1.0, z: CANAL_RADIUS_M * 4.2 }
 const CLOT_RADIUS_SCENE = CANAL_RADIUS_M * 0.28;
 const DUCT_TUBE_RADIUS_SCENE = CANAL_RADIUS_M * 0.22;
 const CUPULA_RADIUS_SCENE = DUCT_TUBE_RADIUS_SCENE * 2.4;
+
+/**
+ * Per-canal scale on top of computeCupulaElevation's base magnitude (CUPULA_RADIUS_SCENE
+ * * 0.9) -- see that function's doc comment. The horizontal canal's real ampulla bulge
+ * (labyrinthAssembly mesh) reads visually smaller/differently-shaped than the posterior
+ * canal's, so the SAME absolute elevation that sits right on the posterior canal's bulge
+ * overshoots past the horizontal canal's, placing cupulolithiasis debris outside it --
+ * confirmed against the live app. This factor is a visual tune (schematic, like the base
+ * magnitude itself), not derived from a real measurement.
+ */
+const CUPULA_ELEVATION_MAGNITUDE_SCALE: Record<CanalType, number> = {
+  posterior: 1,
+  horizontal: 0.45,
+};
 
 // Active vs. inactive opacity for the per-canal real duct/ampulla materials -- see
 // loadRealAnatomy/updateActiveCanalHighlight. The gap between these is deliberately
@@ -201,12 +232,26 @@ export class CanalScene {
    * crista, and cupulolithiasis debris sits ON that dome, not at the duct centerline).
    * DIRECTION is the canal's own plane normal (CANAL_PLANE_NORMAL) -- the cupula, as a
    * membrane sealing the ampulla, protrudes perpendicular to the duct's local plane, out
-   * of the ring the duct sweeps through. (An earlier version derived direction from the
-   * dataset's per-canal H_inner/H_outer caliper pair, but that pair turned out to be too
-   * noisy/ambiguous -- it visually placed debris essentially unchanged or even lower
-   * instead of raised, so it was dropped in favor of this cleaner, already-validated
-   * vector.) MAGNITUDE is deliberately schematic (a fixed fraction of the rendered cupula
-   * radius), not derived from any absolute measurement.
+   * of the ring the duct sweeps through.
+   *
+   * (Tried deriving this from EAR_ANATOMY's real per-canal cupula.base->cupula.apex
+   * landmark pair instead, hoping for a real direction+magnitude for every canal
+   * uniformly -- checked numerically and REJECTED: that vector's dot product with the
+   * canal's own plane normal is only ~0.1-0.15, i.e. base->apex is mostly IN-PLANE, not
+   * a "protrude out of the ring plane" direction at all, so using it directly threw
+   * debris sideways by up to ~5-7mm -- visibly correct-by-coincidence for one ear and
+   * badly wrong for the other when checked against the live app. An EVEN earlier version
+   * derived direction from the dataset's per-canal H_inner/H_outer caliper pair
+   * specifically, which had the same kind of problem -- see MAGNITUDE_SCALE below for
+   * the actual fix to the horizontal-canal-specific overshoot this was chasing.)
+   *
+   * MAGNITUDE is a fixed fraction of the rendered cupula radius, further scaled per
+   * canal by CUPULA_ELEVATION_MAGNITUDE_SCALE -- the horizontal canal's real ampulla
+   * bulge (labyrinthAssembly mesh) reads visually smaller/differently-shaped than the
+   * posterior canal's, so the same absolute offset that looks right for posterior
+   * overshoots past the horizontal canal's bulge, placing cupulolithiasis debris
+   * visibly outside it (confirmed against the live app, this was the originally
+   * reported bug this whole investigation was chasing).
    */
   private cupulaElevation = new THREE.Vector3();
   private style: CanalStyle = 'realistic';
@@ -665,7 +710,7 @@ export class CanalScene {
    */
   private computeCupulaElevation(canal: CanalType, side: 'left' | 'right'): THREE.Vector3 {
     const direction = toThreeVector3(CANAL_PLANE_NORMAL[canal][side]).normalize();
-    return direction.multiplyScalar(CUPULA_RADIUS_SCENE * 0.9);
+    return direction.multiplyScalar(CUPULA_RADIUS_SCENE * 0.9 * CUPULA_ELEVATION_MAGNITUDE_SCALE[canal]);
   }
 
   /**
