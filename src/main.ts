@@ -123,10 +123,20 @@ const maneuverPlayer = new ManeuverPlayer(dixHallpikeRight);
 const mouseDragSource = new MouseDragSource(headCanvas);
 const gyroSource = new DeviceOrientationSource();
 
-// Interactive drag mode is the default: dragging the head view should immediately
-// show gravity moving the otoconia clot to a new low point, with no dropdown-hunting
-// required first.
-let mode: PlaybackMode = 'mouse';
+// Same breakpoint as styles.css's mobile layout switch -- a phone-sized screen is
+// actually being carried/tilted by the user, so real gyroscope motion is the natural
+// interaction there, unlike desktop where there's no physical device to tilt and
+// mouse-drag is the only option anyway.
+const IS_MOBILE_SCREEN = window.matchMedia('(max-width: 760px)').matches;
+
+// Interactive drag mode is the default on desktop: dragging the head view should
+// immediately show gravity moving the otoconia clot to a new low point, with no
+// dropdown-hunting required first. On a phone-sized screen, gyroscope is the more
+// natural default instead (see IS_MOBILE_SCREEN) -- actually tilting the phone IS
+// tilting "the head", which mouse-drag can only approximate. Actually starting the
+// gyro still requires a permission grant (see enableGyro's doc comment), attempted
+// automatically below once the rest of the app is wired up.
+let mode: PlaybackMode = IS_MOBILE_SCREEN ? 'gyro' : 'mouse';
 let selector: CanalSelector = {
   canal: 'posterior',
   side: 'right',
@@ -179,6 +189,29 @@ function applyCanalChange(): void {
   resetPhysics();
 }
 
+/**
+ * Requests motion permission (a no-op prompt on Android/desktop, an explicit grant on
+ * iOS 13+) and starts the gyro source if granted. Shared by the manual "Gyroscope: Off"
+ * toggle tap and the automatic attempt on load when the screen is phone-sized (see
+ * IS_MOBILE_SCREEN below) -- on iOS the automatic attempt will silently fail (permission
+ * requests there only work from inside a real user-gesture handler, not page load), in
+ * which case this leaves the toggle showing "Off" with a status message, same as if the
+ * user had tapped it themselves and been denied; on Android/desktop (no permission
+ * prompt at all) it succeeds either way.
+ */
+function enableGyro(): void {
+  requestOrientationPermission().then((granted) => {
+    if (granted) {
+      gyroSource.start();
+      controls.setGyroEnabled(true);
+      controls.setGyroStatus('Gyroscope on — tap Calibrate gyro while holding the phone naturally');
+    } else {
+      controls.setGyroEnabled(false);
+      controls.setGyroStatus('Tap "Gyroscope: Off" to allow motion access');
+    }
+  });
+}
+
 const controls = new Controls(
   controlsContainer,
   {
@@ -223,18 +256,7 @@ const controls = new Controls(
         controls.setGyroStatus('');
         return;
       }
-      requestOrientationPermission().then((granted) => {
-        if (granted) {
-          gyroSource.start();
-          controls.setGyroStatus('Gyroscope on — tap Calibrate gyro while holding the phone naturally');
-        } else {
-          // Revert the toggle's own displayed state -- the click already flipped it to
-          // "On" optimistically, but permission was denied, so nothing is actually
-          // listening.
-          controls.setGyroEnabled(false);
-          controls.setGyroStatus('Motion permission denied');
-        }
-      });
+      enableGyro();
     },
     onCalibrateGyro: () => {
       gyroSource.calibrateZero();
@@ -243,6 +265,12 @@ const controls = new Controls(
   },
   mode
 );
+
+// Best-effort auto-start on phone-sized screens (see IS_MOBILE_SCREEN/enableGyro) --
+// works on Android/desktop (no permission prompt to begin with), silently falls back to
+// requiring a manual tap on iOS (permission requests there only work from inside a real
+// user-gesture handler, not page load).
+if (IS_MOBILE_SCREEN) enableGyro();
 
 // Real short-arm landmarks (posterior canal only -- see ShortArmPath's doc comment),
 // read directly from the same generated dataset canalScene.ts uses for rendering.
