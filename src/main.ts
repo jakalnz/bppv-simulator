@@ -28,6 +28,9 @@ import { HeadScene } from './scene/headScene';
 
 import { Controls, ManeuverKey, PlaybackMode } from './ui/controls';
 import { VngTrace } from './ui/vngTrace';
+import { keepScreenAwake } from './ui/wakeLock';
+
+keepScreenAwake();
 
 const eyeCanvas = document.getElementById('eye-canvas') as HTMLCanvasElement;
 const canalCanvas = document.getElementById('canal-canvas') as HTMLCanvasElement;
