@@ -97,13 +97,36 @@ export class Controls {
       callbacks.onSelectManeuver(this.maneuverSelect.value as ManeuverKey)
     );
 
+    // canal-variant-label lives inside the canal panel's own canvas (see index.html) --
+    // showing the current ear/pathology/debris-side selection right where the model is,
+    // now that those toggles have moved off the control bar into a popup (see
+    // variantButton/variantPopover below), instead of only being visible after opening it.
+    const variantLabel = document.getElementById('canal-variant-label') as HTMLDivElement | null;
+    let currentSide: EarSide = 'right';
+    let currentPathology: Pathology = 'canalithiasis';
+    let currentDebrisUtricular = false;
+    const updateVariantLabel = (): void => {
+      if (!variantLabel) return;
+      const sideText = currentSide === 'right' ? 'Right ear' : 'Left ear';
+      const pathologyText = currentPathology === 'canalithiasis' ? 'Canalithiasis' : 'Cupulolithiasis';
+      const debrisText =
+        currentPathology === 'cupulolithiasis'
+          ? ` · ${currentDebrisUtricular ? 'Utricular-side' : 'Canal-side'} debris`
+          : '';
+      variantLabel.textContent = `${sideText} · ${pathologyText}${debrisText}`;
+    };
+
     const sideToggle = this.makeToggleButton<EarSide>(
       [
         { value: 'right', label: 'Right ear' },
         { value: 'left', label: 'Left ear' },
       ],
       'right',
-      (side) => callbacks.onSelectSide(side)
+      (side) => {
+        currentSide = side;
+        updateVariantLabel();
+        callbacks.onSelectSide(side);
+      }
     );
 
     // Same two-values-only reasoning as canalToggle/sideToggle above.
@@ -113,7 +136,11 @@ export class Controls {
         { value: 'utricular', label: 'Debris: utricular-side' },
       ],
       'canal',
-      (value) => callbacks.onSelectDebrisSide(value === 'utricular')
+      (value) => {
+        currentDebrisUtricular = value === 'utricular';
+        updateVariantLabel();
+        callbacks.onSelectDebrisSide(currentDebrisUtricular);
+      }
     );
     // Only meaningful for cupulolithiasis -- see CanalSelector.debrisOnUtricularSide.
     debrisSideToggle.style.display = 'none';
@@ -125,10 +152,13 @@ export class Controls {
       ],
       'canalithiasis',
       (pathology) => {
+        currentPathology = pathology;
         debrisSideToggle.style.display = pathology === 'cupulolithiasis' ? '' : 'none';
+        updateVariantLabel();
         callbacks.onSelectPathology(pathology);
       }
     );
+    updateVariantLabel();
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'primary-btn';
@@ -229,14 +259,49 @@ export class Controls {
 
     this.updateModeVisibility(initialMode);
 
-    // Two explicit rows (context toggles, then playback/transport) instead of letting
-    // eight independent flex items wrap wherever they happen to fit -- that produced an
+    // Ear/canal/pathology/debris-side used to sit inline in their own row -- four
+    // buttons' worth of height on every screen, permanently, even though they're changed
+    // rarely compared to Play/scrub. Moved into a single popup opened by one "BPPV
+    // Variant" trigger button instead, freeing that row's height for the 3D views (the
+    // scarce resource on mobile); the current selection is still visible at a glance via
+    // variantLabel, now overlaid on the canal canvas itself instead of read off these
+    // buttons' own labels.
+    const variantPopover = document.createElement('div');
+    variantPopover.className = 'variant-popover';
+    variantPopover.hidden = true;
+    variantPopover.append(sideToggle, canalToggle, pathologyToggle, debrisSideToggle);
+    document.body.appendChild(variantPopover);
+
+    const variantButton = document.createElement('button');
+    variantButton.type = 'button';
+    variantButton.textContent = 'BPPV Variant';
+    variantButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const opening = variantPopover.hidden;
+      variantPopover.hidden = !opening;
+      if (opening) {
+        // Anchored above the trigger button (not below it) -- this control bar sits at
+        // the bottom of the page (sticky on mobile), so a popover opening downward would
+        // usually overflow off the bottom of the viewport.
+        const rect = variantButton.getBoundingClientRect();
+        variantPopover.style.left = `${rect.left}px`;
+        variantPopover.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!variantPopover.hidden && e.target !== variantButton && !variantPopover.contains(e.target as Node)) {
+        variantPopover.hidden = true;
+      }
+    });
+
+    // Two explicit rows (context trigger, then playback/transport) instead of letting
+    // independent flex items wrap wherever they happen to fit -- that produced an
     // unpredictable ragged layout that ate more height than the content needed. Grouping
     // by row means each row's own content sets its height, and the row always breaks in
     // the same place regardless of container width.
     const contextRow = document.createElement('div');
     contextRow.className = 'control-row';
-    contextRow.append(sideToggle, canalToggle, pathologyToggle, debrisSideToggle);
+    contextRow.append(variantButton);
 
     const playbackRow = document.createElement('div');
     playbackRow.className = 'control-row';

@@ -167,6 +167,64 @@ body {
   color: var(--text-dim);
 }
 
+/* Ear/canal/pathology/debris-side toggles, moved out of the control bar's own row and
+ * into this popup (see controls.ts's variantButton/variantPopover) -- fixed/appended to
+ * <body> for the same overflow:hidden-escaping reason as .about-popover, positioned
+ * ABOVE its trigger button (via JS-set bottom, not top) since the control bar sits at
+ * the page's bottom edge. */
+/* display:flex only applies when NOT [hidden] -- an unconditional `display: flex` here
+ * would be an author-stylesheet rule at the same specificity as the UA stylesheet's own
+ * `[hidden] { display: none }`, and author rules win ties regardless of source order, so
+ * it would silently defeat the hidden attribute (confirmed against the live app: the
+ * popover stayed visually open after variantPopover.hidden was set back to true). */
+.variant-popover:not([hidden]) {
+  display: flex;
+}
+
+.variant-popover {
+  position: fixed;
+  z-index: 25;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--overlay);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 190px;
+}
+
+.variant-popover button {
+  width: 100%;
+  text-align: left;
+}
+
+/* Persistent readout of the current ear/pathology/debris-side selection, overlaid on
+ * the canal canvas itself -- now that those controls live behind the "BPPV Variant"
+ * popup (see .variant-popover) rather than always-visible inline buttons, this keeps the
+ * current selection legible at a glance without opening it. Offset right of the
+ * top-left scope-reticle tick (.canvas-wrap::before, a 14px mark from x=6 to x=20) so
+ * the two don't overlap. */
+.canal-variant-label {
+  position: absolute;
+  top: 8px;
+  left: 26px;
+  z-index: 4;
+  background: var(--overlay);
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  max-width: calc(100% - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 /*
  * Desktop layout: Eye is the primary diagnostic view, given the most space; Canal and
  * Head are secondary reference views, stacked in a narrower side column (canal over
@@ -399,7 +457,8 @@ body {
  * #controls is flex:0 0 auto (sized to its own content), that saved height goes
  * straight to the Eye/Canal/Head views without any other layout change needed. */
 #controls button,
-#controls select {
+#controls select,
+.variant-popover button {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border-soft);
@@ -411,11 +470,13 @@ body {
 }
 
 #controls button:hover,
-#controls select:hover {
+#controls select:hover,
+.variant-popover button:hover {
   border-color: var(--accent);
 }
 
-#controls button:active {
+#controls button:active,
+.variant-popover button:active {
   background: var(--panel-header);
 }
 
@@ -525,9 +586,8 @@ body {
    * small and needs to be tracked as it moves through the duct, which is illegible when
    * squashed into the small paired-row slot Eye gets on desktop. Eye moves down into
    * that smaller paired row instead, alongside Head. Canal's share of the two rows
-   * (3fr vs 1fr, up from 2.1fr) was bumped further after the model still read as too
-   * small on phones -- combined with the shrunk VNG panel and controls bar below, this
-   * gives the canal view most of the screen's actual vertical space. */
+   * (2.7fr, down from 3fr -- a deliberate ~10% trim, see below) still dominates over
+   * Eye/Head's shared row. */
   #views {
     /* Eye/Head split their shared row unevenly (was 1fr 1fr) -- Head is just a coarse
      * tilt glance, so giving it less width lets Eye (what nystagmus is actually read
@@ -535,7 +595,13 @@ body {
      * canal model's on-screen size (see canalScene.ts's updateCameraForStyle -- it
      * fits the model tightly to whatever canvas space its row/column gives it). */
     grid-template-columns: 1.7fr 1fr;
-    grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
+    /* Canal's row trimmed ~10% (3fr -> 2.7fr) and handed to Eye/Head's row (1fr -> 1.3fr)
+     * -- requested after Eye still read too small even with the header/legend/control-bar
+     * trims above. This DOES shrink the canal model somewhat (its camera fits tightly to
+     * whatever canvas height this row gives it, see canalScene.ts), a deliberate trade
+     * accepted here in exchange for more Eye height, unlike the earlier chrome-only trims
+     * that avoided touching this row specifically to keep the model's size untouched. */
+    grid-template-rows: minmax(0, 2.7fr) minmax(0, 1.3fr);
     grid-template-areas:
       'canal canal'
       'eye head';
@@ -570,6 +636,13 @@ body {
     font-size: 0.6rem;
   }
 
+  .canal-variant-label {
+    top: 6px;
+    left: 22px;
+    padding: 1px 7px;
+    font-size: 0.54rem;
+  }
+
   /* max-height capped tighter than an earlier 34vh -- on a short phone screen that was
    * eating a third of the viewport on its own, at the model view's expense. Controls
    * still scroll internally (overflow-y) if they don't all fit, rather than pushing the
@@ -600,16 +673,17 @@ body {
     gap: 4px;
   }
 
-  /* Touch targets: buttons/selects get taller tap areas on touch screens -- still a
-   * comfortable size (34px), just no longer the desktop-plus-padding of the pre-toggle-
-   * button layout, which this compacted control bar no longer needs (see the two-value
-   * selects that became toggle buttons: ear/canal/pathology/debris-side). Trimmed from
-   * 36px alongside the row restructure, still a reasonable tap target. */
+  /* Touch targets: buttons/selects get taller tap areas on touch screens, but trimmed
+   * again here (was 34px/0.74rem) now that the ear/canal/pathology/debris toggles moved
+   * into the "BPPV Variant" popup (see controls.ts) -- what's left on this row (mode
+   * select, Play, the two reset buttons) is tapped far less often than Play/scrub, so it
+   * can afford to be smaller than a primary action would need to be. 30px is still
+   * comfortably above the ~28px minimum usable touch target. */
   #controls button,
   #controls select {
-    padding: 6px 9px;
-    font-size: 0.74rem;
-    min-height: 34px;
+    padding: 5px 8px;
+    font-size: 0.7rem;
+    min-height: 30px;
   }
 
   /* Developer diagnostic readout (s/beta/eye-angle/etc) -- useful on desktop, but on
@@ -660,4 +734,74 @@ body {
   border-radius: 50%;
   border: 1.6px solid #14161a;
   background: linear-gradient(90deg, #14161a 50%, #fdfdfd 50%);
+}
+
+/* Fullscreen toggle -- stacked directly above the theme toggle (same fixed corner, same
+ * size language, one size down since it's a secondary action). Hidden entirely via JS
+ * (see main.ts) where the Fullscreen API isn't supported, rather than showing a button
+ * that would silently no-op (notably iOS Safari before iOS 16). */
+.fullscreen-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.fullscreen-toggle:hover {
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+
+.fullscreen-toggle:active {
+  transform: scale(0.96);
+}
+
+/* Reuses the same scope-reticle corner-bracket motif as .canvas-wrap (see that rule's
+ * doc comment) at button scale -- "expand into fullscreen" reads naturally as the same
+ * viewfinder-corners language used everywhere else a canvas is being framed. Rotated 45
+ * degrees while active as a lightweight "now closing inward" cue, rather than authoring
+ * a second, different icon just for that state. */
+.fullscreen-toggle-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+
+.fullscreen-toggle-icon::before,
+.fullscreen-toggle-icon::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+}
+
+.fullscreen-toggle-icon::before {
+  top: 0;
+  left: 0;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+.fullscreen-toggle-icon::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+
+.fullscreen-toggle.is-fullscreen .fullscreen-toggle-icon {
+  transform: rotate(45deg);
 }

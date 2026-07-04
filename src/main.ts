@@ -48,6 +48,31 @@ const controlsContainer = document.getElementById('controls') as HTMLDivElement;
 const themeToggleBtn = document.getElementById('theme-toggle') as HTMLButtonElement;
 themeToggleBtn.addEventListener('click', () => toggleTheme());
 
+// Fullscreen (Fullscreen API): on mobile, this hides the browser's own address bar/nav
+// chrome, handing that vertical space to the viewport -- the same motivation as every
+// other mobile space-saving change in this file, just outside what CSS alone can reach.
+// Hidden entirely where unsupported (document.fullscreenEnabled is false, notably iOS
+// Safari before iOS 16) rather than showing a button that would silently no-op.
+const fullscreenToggleBtn = document.getElementById('fullscreen-toggle') as HTMLButtonElement;
+if (!document.fullscreenEnabled) {
+  fullscreenToggleBtn.style.display = 'none';
+} else {
+  fullscreenToggleBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    const isFullscreen = document.fullscreenElement != null;
+    fullscreenToggleBtn.classList.toggle('is-fullscreen', isFullscreen);
+    const label = isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+    fullscreenToggleBtn.title = label;
+    fullscreenToggleBtn.setAttribute('aria-label', label);
+  });
+}
+
 const eyeScene = new EyeScene(eyeCanvas);
 const canalScene = new CanalScene(canalCanvas);
 const headScene = new HeadScene(headCanvas);
