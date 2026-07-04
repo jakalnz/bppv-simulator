@@ -98,22 +98,27 @@ export class Controls {
     );
 
     // canal-variant-label lives inside the canal panel's own canvas (see index.html) --
-    // showing the current ear/pathology/debris-side selection right where the model is,
-    // now that those toggles have moved off the control bar into a popup (see
-    // variantButton/variantPopover below), instead of only being visible after opening it.
+    // showing the current ear/pathology/debris-side selection (line 1) and the current
+    // playback mode (line 2) right where the model is, now that both the variant toggles
+    // AND the mode picker have moved off the control bar into popups (see makePopoverButton
+    // below), instead of only being visible after opening one of them.
     const variantLabel = document.getElementById('canal-variant-label') as HTMLDivElement | null;
+    const variantLine = document.createElement('div');
+    const modeLine = document.createElement('div');
+    modeLine.className = 'canal-variant-label__mode';
+    variantLabel?.append(variantLine, modeLine);
+
     let currentSide: EarSide = 'right';
     let currentPathology: Pathology = 'canalithiasis';
     let currentDebrisUtricular = false;
     const updateVariantLabel = (): void => {
-      if (!variantLabel) return;
       const sideText = currentSide === 'right' ? 'Right ear' : 'Left ear';
       const pathologyText = currentPathology === 'canalithiasis' ? 'Canalithiasis' : 'Cupulolithiasis';
       const debrisText =
         currentPathology === 'cupulolithiasis'
           ? ` · ${currentDebrisUtricular ? 'Utricular-side' : 'Canal-side'} debris`
           : '';
-      variantLabel.textContent = `${sideText} · ${pathologyText}${debrisText}`;
+      variantLine.textContent = `${sideText} · ${pathologyText}${debrisText}`;
     };
 
     const sideToggle = this.makeToggleButton<EarSide>(
@@ -174,7 +179,7 @@ export class Controls {
     });
 
     const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset all';
+    resetBtn.textContent = 'Reset';
     resetBtn.title = 'Reset the maneuver position, head orientation, and otoconia/cupula physics';
     resetBtn.addEventListener('click', () => {
       this.playBtn.textContent = 'Play';
@@ -199,18 +204,35 @@ export class Controls {
     this.label = document.createElement('span');
     this.label.style.minWidth = '220px';
 
-    const modeSelect = document.createElement('select');
-    modeSelect.innerHTML = `
-      <option value="maneuver">Scripted maneuver</option>
-      <option value="mouse">Mouse-drag (desktop)</option>
-      <option value="gyro">Gyroscope (phone)</option>
-    `;
-    modeSelect.value = initialMode;
-    modeSelect.addEventListener('change', () => {
-      const nextMode = modeSelect.value as PlaybackMode;
-      this.updateModeVisibility(nextMode);
-      callbacks.onModeChange(nextMode);
+    // Mode picker's trigger button always reads "Mode" (not the current selection, unlike
+    // the ear/canal/pathology toggles) -- the current mode is shown instead as the second
+    // line of variantLabel (see modeLine above), matching where the variant popup's own
+    // selection is now surfaced. A <select> couldn't do this (its closed state always
+    // shows the selected option's own text), so this is a button + popup of one-shot
+    // choice buttons instead of makeToggleButton's cycle-in-place pattern.
+    const MODE_OPTIONS: { value: PlaybackMode; label: string }[] = [
+      { value: 'maneuver', label: 'Scripted maneuver' },
+      { value: 'mouse', label: 'Mouse-drag (desktop)' },
+      { value: 'gyro', label: 'Gyroscope (phone)' },
+    ];
+    const MODE_LABELS = Object.fromEntries(MODE_OPTIONS.map((o) => [o.value, o.label])) as Record<
+      PlaybackMode,
+      string
+    >;
+    modeLine.textContent = MODE_LABELS[initialMode];
+    const modeOptionButtons = MODE_OPTIONS.map((opt) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = opt.label;
+      b.addEventListener('click', () => {
+        modePopover.hidden = true;
+        modeLine.textContent = MODE_LABELS[opt.value];
+        this.updateModeVisibility(opt.value);
+        callbacks.onModeChange(opt.value);
+      });
+      return b;
     });
+    const { button: modeButton, popover: modePopover } = this.makePopoverButton('Mode', modeOptionButtons);
 
     // Toggle button (not a one-shot "Enable motion" action) so its own label/indicator
     // always reflects whether the gyroscope is actually listening -- tapping it again
@@ -236,13 +258,6 @@ export class Controls {
     this.debug = document.createElement('pre');
     this.debug.className = 'debug-readout';
 
-    // Mode picker + both reset buttons: always relevant regardless of which mode is
-    // active, so always visible/on their own line -- unlike the maneuver/gyro groups
-    // below, which only make sense in ONE specific mode each.
-    const alwaysGroup = document.createElement('div');
-    alwaysGroup.className = 'control-group';
-    alwaysGroup.append(modeSelect, resetBtn, this.resetClotBtn);
-
     // Play/scrub/maneuver-select: only meaningful in "maneuver" mode (there's no
     // scripted position to play or scrub through otherwise) -- grouped on one line so
     // they read as a single "maneuver playback" unit, and shown/hidden as a whole (see
@@ -266,48 +281,67 @@ export class Controls {
     // scarce resource on mobile); the current selection is still visible at a glance via
     // variantLabel, now overlaid on the canal canvas itself instead of read off these
     // buttons' own labels.
-    const variantPopover = document.createElement('div');
-    variantPopover.className = 'variant-popover';
-    variantPopover.hidden = true;
-    variantPopover.append(sideToggle, canalToggle, pathologyToggle, debrisSideToggle);
-    document.body.appendChild(variantPopover);
+    const { button: variantButton } = this.makePopoverButton('BPPV Variant', [
+      sideToggle,
+      canalToggle,
+      pathologyToggle,
+      debrisSideToggle,
+    ]);
 
-    const variantButton = document.createElement('button');
-    variantButton.type = 'button';
-    variantButton.textContent = 'BPPV Variant';
-    variantButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const opening = variantPopover.hidden;
-      variantPopover.hidden = !opening;
-      if (opening) {
-        // Anchored above the trigger button (not below it) -- this control bar sits at
-        // the bottom of the page (sticky on mobile), so a popover opening downward would
-        // usually overflow off the bottom of the viewport.
-        const rect = variantButton.getBoundingClientRect();
-        variantPopover.style.left = `${rect.left}px`;
-        variantPopover.style.bottom = `${window.innerHeight - rect.top + 6}px`;
-      }
-    });
-    document.addEventListener('click', (e) => {
-      if (!variantPopover.hidden && e.target !== variantButton && !variantPopover.contains(e.target as Node)) {
-        variantPopover.hidden = true;
-      }
-    });
-
-    // Two explicit rows (context trigger, then playback/transport) instead of letting
-    // independent flex items wrap wherever they happen to fit -- that produced an
-    // unpredictable ragged layout that ate more height than the content needed. Grouping
-    // by row means each row's own content sets its height, and the row always breaks in
-    // the same place regardless of container width.
+    // Context row: variant picker, mode picker, and both reset buttons -- everything
+    // that's always relevant regardless of playback mode, and (with the variant/mode
+    // pickers now popup buttons rather than inline toggles or a <select>) short enough to
+    // guarantee this fits on one line. Row 2 (playbackRow) is then only ever the
+    // maneuver OR gyro group (mutually exclusive by mode, see updateModeVisibility), so
+    // every mode is capped at two rows total.
     const contextRow = document.createElement('div');
     contextRow.className = 'control-row';
-    contextRow.append(variantButton);
+    contextRow.append(variantButton, modeButton, resetBtn, this.resetClotBtn);
 
     const playbackRow = document.createElement('div');
     playbackRow.className = 'control-row';
-    playbackRow.append(alwaysGroup, this.maneuverGroup, this.gyroGroup, this.debug);
+    playbackRow.append(this.maneuverGroup, this.gyroGroup, this.debug);
 
     container.append(contextRow, playbackRow);
+  }
+
+  /**
+   * A trigger button + a popup of arbitrary content, positioned ABOVE the button (not
+   * below) since the control bar this is used from sits at the page's bottom edge
+   * (sticky on mobile) -- opening downward would usually overflow off the viewport.
+   * Closes on any outside click. Shared by the "BPPV Variant" and "Mode" pickers (see
+   * their own call sites) rather than duplicating this positioning/open/close logic
+   * for each.
+   */
+  private makePopoverButton(
+    label: string,
+    content: HTMLElement[]
+  ): { button: HTMLButtonElement; popover: HTMLDivElement } {
+    const popover = document.createElement('div');
+    popover.className = 'variant-popover';
+    popover.hidden = true;
+    popover.append(...content);
+    document.body.appendChild(popover);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const opening = popover.hidden;
+      popover.hidden = !opening;
+      if (opening) {
+        const rect = button.getBoundingClientRect();
+        popover.style.left = `${rect.left}px`;
+        popover.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!popover.hidden && e.target !== button && !popover.contains(e.target as Node)) {
+        popover.hidden = true;
+      }
+    });
+    return { button, popover };
   }
 
   /**
@@ -342,7 +376,7 @@ export class Controls {
     this.gyroGroup.style.display = mode === 'gyro' ? '' : 'none';
     // "Reset debris" (onResetClot) exists specifically for mouse-drag/gyro modes, where
     // there's no scripted maneuver position to reset otherwise -- see its own doc
-    // comment. In "maneuver" mode, "Reset all" already resets the debris/cupula physics
+    // comment. In "maneuver" mode, "Reset" already resets the debris/cupula physics
     // alongside the maneuver position, so this button is pure redundant clutter there.
     this.resetClotBtn.style.display = mode === 'maneuver' ? 'none' : '';
   }

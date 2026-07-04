@@ -213,16 +213,30 @@ body {
   background: var(--overlay);
   color: var(--text-dim);
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  padding: 2px 9px;
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
   font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
   font-size: 0.62rem;
   letter-spacing: 0.03em;
-  white-space: nowrap;
   max-width: calc(100% - 40px);
+  pointer-events: none;
+}
+
+/* Each line (variant, then mode -- see controls.ts's variantLine/modeLine) truncates
+ * independently, since they're separate block children now, not one line of text. */
+.canal-variant-label > div {
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;
+}
+
+/* Second line: the current playback mode (see controls.ts's modeLine), under the
+ * ear/pathology line -- dimmer and slightly smaller so it reads as secondary/contextual
+ * info, not equal in weight to the variant selection above it. */
+.canal-variant-label__mode {
+  color: var(--text-faint);
+  font-size: 0.9em;
+  margin-top: 1px;
 }
 
 /*
