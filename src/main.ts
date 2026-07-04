@@ -1,6 +1,6 @@
 import { Quat, quatAngleBetween, quatInvert, rotateVec } from './physics/types';
 import { G_WORLD, LATENCY_SECONDS, ADHERENCE_WINDOW_SECONDS } from './physics/params';
-import { CanalithState, initialCanalithState, updateCanalith, isCleared } from './physics/canalith';
+import { CanalithState, initialCanalithState, canalithStateAtAmpulla, updateCanalith, isCleared } from './physics/canalith';
 import { ShortArmPath, ShortArmState, initialShortArmState, updateShortArm } from './physics/shortArmReentry';
 import { updateCupula, relaxOnly } from './physics/cupula';
 import { cupulolithiasisDrive } from './physics/cupulolithiasis';
@@ -255,7 +255,7 @@ const SHORT_ARM_PATH: ShortArmPath = {
 };
 
 // Physics state.
-let canalithState: CanalithState = initialCanalithState();
+let canalithState: CanalithState = initialCanalithState(selector.canal, selector.side);
 let beta = 0; // cupula deflection
 let vor: VorState = initialVorState();
 let lastQHead: Quat = maneuverPlayer.currentOrientation();
@@ -275,7 +275,7 @@ let releaseDetector: CupulaReleaseDetector = initialReleaseDetector();
 let cupulaDebrisReleased = false;
 
 function resetPhysics(): void {
-  canalithState = initialCanalithState();
+  canalithState = initialCanalithState(selector.canal, selector.side);
   shortArmState = initialShortArmState();
   secondsSinceSettled = 0;
   beta = 0;
@@ -322,7 +322,7 @@ function stepPhysicsOnce(dt: number): void {
     // gate before it starts moving -- not literally re-adhering, but a reasonable stand-in
     // for a brief settling period before organized flow begins, consistent with reusing
     // existing, already-tuned code rather than adding a second latency concept.
-    canalithState = initialCanalithState();
+    canalithState = canalithStateAtAmpulla();
   }
 
   const useAttachedCupulaPhysics = selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased;
@@ -354,7 +354,7 @@ function stepPhysicsOnce(dt: number): void {
         // physics from the ampulla (s=0), same convention as a fresh
         // cupulolithiasis-release above, and reset the short-arm tracking so it can
         // fire again if this canal clears a second time later in the session.
-        canalithState = initialCanalithState();
+        canalithState = canalithStateAtAmpulla();
         shortArmState = initialShortArmState();
         secondsSinceSettled = 0;
         reenteredToast.show();

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { quatAngleBetween } from './types';
 import { RAPID_SPEED_THRESHOLD } from './params';
-import { initialCanalithState, updateCanalith, isCleared } from './canalith';
+import { initialCanalithState, canalithStateAtAmpulla, updateCanalith, isCleared } from './canalith';
 import { updateCupula, relaxOnly } from './cupula';
 import { cupulolithiasisDrive } from './cupulolithiasis';
 import { initialReleaseDetector, updateReleaseDetector } from './cupulaRelease';
@@ -62,7 +62,7 @@ describe('RAPID_SPEED_THRESHOLD discriminates rapid vs gentle maneuvers', () => 
 function runWithRelease(maneuver: Maneuver, selector: CanalSelector) {
   const player = new ManeuverPlayer(maneuver);
   player.play();
-  let canalithState = initialCanalithState();
+  let canalithState = initialCanalithState(selector.canal, selector.side);
   let beta = 0;
   let prevQ = player.currentOrientation();
   let releaseDetector = initialReleaseDetector();
@@ -81,7 +81,7 @@ function runWithRelease(maneuver: Maneuver, selector: CanalSelector) {
     if (selector.pathology === 'cupulolithiasis' && !debrisReleased && released) {
       debrisReleased = true;
       releasedAtStep = i;
-      canalithState = initialCanalithState();
+      canalithState = canalithStateAtAmpulla();
     }
 
     const gHead: [number, number, number] = [0, 0, 0]; // gravity direction not needed for release-only assertions below

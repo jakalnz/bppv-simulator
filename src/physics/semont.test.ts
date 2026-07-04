@@ -41,7 +41,7 @@ describe.each([
   it('clot moves ampullofugally (ds/dt > 0) once released lying on the affected side', () => {
     const wp = findWaypoint(maneuver, `Rapid lie onto ${side} side`);
     const gHead = rotateVec(quatInvert(wp.quat), G_WORLD);
-    const state = runFor(initialCanalithState(), gHead, LATENCY_SECONDS + 1, selector);
+    const state = runFor(initialCanalithState(selector.canal, selector.side), gHead, LATENCY_SECONDS + 1, selector);
     expect(state.released).toBe(true);
     expect(state.dsdt).toBeGreaterThan(0);
     expect(state.s).toBeGreaterThan(0);

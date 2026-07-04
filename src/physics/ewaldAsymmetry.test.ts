@@ -18,7 +18,7 @@ const DT = 1 / 120;
  * roll positions directly.
  */
 function peakHorizontalSpv(gHead: ReturnType<typeof rotateVec>, selector: CanalSelector, seconds: number): number {
-  let canalithState = initialCanalithState();
+  let canalithState = initialCanalithState(selector.canal, selector.side);
   let beta = 0;
   let vor = initialVorState();
   let prevHorizontal = 0;
@@ -112,5 +112,89 @@ describe.each([
 
   it(`sanity: ${opposite} is indeed the opposite ear of ${side}`, () => {
     expect(opposite).not.toBe(side);
+  });
+});
+
+/**
+ * debrisOnUtricularSide=true ("light cupula" / utricular-side apogeotropic HC-BPPV,
+ * the variant the Zuma maneuver targets -- see maneuvers/zuma.ts and
+ * cupulolithiasisDrive's sign flip in cupulolithiasis.ts) is a SEPARATE mechanism from
+ * the debrisOnUtricularSide=false case covered by the Table 1 tests above, and flips
+ * cupulolithiasisDrive's sign for the same pose (see cupulolithiasis.test.ts's
+ * "debrisOnUtricularSide flips the sign of the drive" unit test). That unit test only
+ * checks the raw drive value, not that the flip survives updateCupula -> updateVor ->
+ * decomposeEyeMovement to produce the correct end-to-end velocity asymmetry -- this
+ * closes that gap using the same peakHorizontalSpv harness as Table 1 above.
+ *
+ * Expectation: since the drive sign is the OPPOSITE of the canal-side case for the same
+ * pose, the stronger-response direction should also be the OPPOSITE of the canal-side
+ * Table 1 result -- i.e. stronger rolling TOWARD the affected ear (matching the light-
+ * cupula/utricular-side literature, where the reversed buoyancy reverses which head
+ * position gives the excitatory, larger-magnitude response).
+ */
+/**
+ * Screen-direction convention for horizontalDeg, pinned down against a clinical
+ * naming convention (VOG/exam-recording view, examiner facing the patient -- so the
+ * patient's right ear appears on the LEFT of the screen, a mirror image, the same way
+ * a person facing you has their right hand on your left): nystagmus is named for its
+ * FAST (quick) phase direction, and "right-beating" means the fast phase beats toward
+ * the patient's right ear, which on a mirrored exam view appears as movement toward
+ * screen-LEFT (decreasing horizontalDeg, given eyeScene.ts's positive-horizontalDeg
+ * -> screen-right mapping).
+ *
+ * For geotropic horizontal canalithiasis (the affected-ear-down position gives the
+ * STRONGER response, confirmed by the Table 1 tests above), the fast phase should beat
+ * toward the ground -- i.e. toward the affected (down) ear. Right ear affected, rolled
+ * right (affected) ear down -> fast phase toward the right ear -> "right-beating" ->
+ * screen-LEFT (horizontalDeg decreasing on the quick-phase reset). Mirrored for the
+ * left ear. This was previously flagged as an unverified labeling choice in
+ * eyeScene.ts's setEyeAngle comment ("Horizontal's screen-direction sign is not
+ * independently verified") -- this test closes that gap.
+ */
+describe.each([
+  ['right', rollTestRight] as const,
+  ['left', rollTestLeft] as const,
+])('quick-phase screen-direction convention (%s ear, geotropic canalithiasis)', (side, maneuver) => {
+  const selector: CanalSelector = { canal: 'horizontal', side, pathology: 'canalithiasis', debrisOnUtricularSide: false };
+  const gHeadAffectedDown = rotateVec(quatInvert(maneuver.waypoints[2].quat), G_WORLD);
+
+  it(`fast phase beats toward screen-${side === 'right' ? 'LEFT' : 'RIGHT'} (mirrored exam view, toward the down/affected ${side} ear)`, () => {
+    let canalithState = initialCanalithState(selector.canal, selector.side);
+    let beta = 0;
+    let vor = initialVorState();
+    let prevEyeAngle = 0;
+    let quickPhaseDeltaH: number | null = null;
+    const steps = Math.ceil(20 / DT);
+    for (let i = 0; i < steps && quickPhaseDeltaH === null; i++) {
+      canalithState = updateCanalith(canalithState, gHeadAffectedDown, DT, selector);
+      beta = updateCupula(beta, canalithState.dsdt, DT);
+      vor = updateVor(vor, beta, DT, selector.canal);
+      if (Math.abs(vor.eyeAngle - prevEyeAngle) > 0.05) {
+        const before = decomposeEyeMovement(prevEyeAngle, selector).horizontalDeg;
+        const after = decomposeEyeMovement(vor.eyeAngle, selector).horizontalDeg;
+        quickPhaseDeltaH = after - before;
+      }
+      prevEyeAngle = vor.eyeAngle;
+    }
+    expect(quickPhaseDeltaH).not.toBeNull();
+    if (side === 'right') expect(quickPhaseDeltaH!).toBeLessThan(0);
+    else expect(quickPhaseDeltaH!).toBeGreaterThan(0);
+  });
+});
+
+describe.each([
+  ['right'] as const,
+  ['left'] as const,
+])('Table 1 analogue, utricular-side cupulolithiasis (%s ear)', (side) => {
+  const maneuver = side === 'right' ? rollTestRight : rollTestLeft;
+  const selector: CanalSelector = { canal: 'horizontal', side, pathology: 'cupulolithiasis', debrisOnUtricularSide: true };
+
+  const gHeadTowardAffected = rotateVec(quatInvert(maneuver.waypoints[2].quat), G_WORLD);
+  const gHeadTowardOpposite = rotateVec(quatInvert(maneuver.waypoints[5].quat), G_WORLD);
+
+  it('stronger response rolling TOWARD the affected ear (opposite of canal-side cupulolithiasis)', () => {
+    const spvTowardAffected = peakHorizontalSpv(gHeadTowardAffected, selector, 10);
+    const spvTowardOpposite = peakHorizontalSpv(gHeadTowardOpposite, selector, 10);
+    expect(spvTowardAffected).toBeGreaterThan(spvTowardOpposite);
   });
 });
