@@ -1,0 +1,582 @@
+<title>BPPV Simulator — Technical White Paper</title>
+<style>
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10181a;
+      --bg-raised: #17211f;
+      --ink: #dfe6e2;
+      --ink-dim: #9fb0aa;
+      --rule: #2a3835;
+      --accent: #5cc2b6;
+      --accent-ink: #0c1615;
+      --amber: #e3a862;
+      --tag-bg: #1c2b28;
+    }
+  }
+  :root {
+    --bg: #eceee7;
+    --bg-raised: #f6f7f2;
+    --ink: #1a2422;
+    --ink-dim: #55655f;
+    --rule: #c9cec2;
+    --accent: #1f6e66;
+    --accent-ink: #eaf5f3;
+    --amber: #9c5f22;
+    --tag-bg: #dfe6dd;
+    font-size: 17px;
+  }
+  :root[data-theme="dark"] {
+    --bg: #10181a;
+    --bg-raised: #17211f;
+    --ink: #dfe6e2;
+    --ink-dim: #9fb0aa;
+    --rule: #2a3835;
+    --accent: #5cc2b6;
+    --accent-ink: #0c1615;
+    --amber: #e3a862;
+    --tag-bg: #1c2b28;
+  }
+  :root[data-theme="light"] {
+    --bg: #eceee7;
+    --bg-raised: #f6f7f2;
+    --ink: #1a2422;
+    --ink-dim: #55655f;
+    --rule: #c9cec2;
+    --accent: #1f6e66;
+    --accent-ink: #eaf5f3;
+    --amber: #9c5f22;
+    --tag-bg: #dfe6dd;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+  }
+  body {
+    font-family: Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    padding: 4.5rem 0 2.5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .kicker {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1rem;
+  }
+  h1.title {
+    font-size: clamp(2.1rem, 5vw, 2.9rem);
+    line-height: 1.12;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .dek {
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 1.05rem;
+    color: var(--ink-dim);
+    max-width: 58ch;
+    margin: 0 0 1.75rem;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+  }
+  .meta-row strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Abstract ---------- */
+  .abstract {
+    margin: 2.5rem 0 0;
+    padding: 1.5rem 1.75rem;
+    background: var(--bg-raised);
+    border-left: 3px solid var(--accent);
+    font-size: 0.98rem;
+  }
+  .abstract p { margin: 0; }
+  .abstract .label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+
+  /* ---------- TOC ---------- */
+  nav.toc {
+    margin: 2.5rem 0 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 0.92rem;
+  }
+  nav.toc ol {
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    columns: 2;
+    column-gap: 2rem;
+  }
+  nav.toc li { break-inside: avoid; margin-bottom: 0.45rem; }
+  nav.toc a {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  nav.toc a:hover, nav.toc a:focus-visible { border-bottom-color: var(--accent); }
+  nav.toc .n {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ink-dim);
+    margin-right: 0.5em;
+  }
+
+  /* ---------- Sections ---------- */
+  section {
+    margin-top: 3.5rem;
+    padding-top: 0.5rem;
+  }
+  h2 {
+    font-size: 1.55rem;
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin: 0 0 0.3rem;
+    text-wrap: balance;
+    scroll-margin-top: 2rem;
+  }
+  h2 .num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .section-intro {
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--ink-dim);
+    font-size: 0.95rem;
+    margin: 0 0 1.5rem;
+    max-width: 62ch;
+  }
+  h3 {
+    font-size: 1.12rem;
+    font-weight: 600;
+    margin: 2rem 0 0.6rem;
+    color: var(--ink);
+  }
+  h3 .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-dim);
+    background: var(--tag-bg);
+    border-radius: 3px;
+    padding: 0.15em 0.5em;
+    margin-left: 0.6em;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+  p { margin: 0 0 1rem; }
+  ul, ol.plain { margin: 0 0 1rem; padding-left: 1.3rem; }
+  li { margin-bottom: 0.45rem; }
+  .ref {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    color: var(--ink-dim);
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--tag-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+  strong { font-weight: 650; }
+  hr.rule {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 3rem 0 0;
+  }
+
+  /* ---------- Constant / data callouts ---------- */
+  .const-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin: 1.25rem 0 1.5rem;
+  }
+  .const {
+    background: var(--bg-raised);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+  }
+  .const .name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-dim);
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .const .val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1.05rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .const .note {
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    margin-top: 0.3rem;
+  }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; margin: 1.25rem 0 1.5rem; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.88rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    font-weight: 600;
+  }
+  td.num, th.num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Callout boxes ---------- */
+  .flag {
+    border: 1px dashed var(--amber);
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem;
+    margin: 0 0 1rem;
+    font-size: 0.92rem;
+    background: color-mix(in srgb, var(--amber) 8%, var(--bg-raised));
+  }
+  .flag .label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+  }
+
+  /* ---------- Improvement list ---------- */
+  .improve {
+    border-left: 3px solid var(--rule);
+    padding-left: 1.1rem;
+    margin-bottom: 1.3rem;
+  }
+  .improve h4 {
+    margin: 0 0 0.3rem;
+    font-size: 1rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-weight: 700;
+  }
+  .improve p { font-size: 0.93rem; margin-bottom: 0; color: var(--ink-dim); }
+  .improve .impact {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-left: 0.6em;
+  }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-dim);
+  }
+
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section { animation: rise 0.4s ease-out both; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<div class="page">
+
+  <div class="masthead">
+    <p class="kicker">Technical White Paper &middot; Vestibular Simulation</p>
+    <h1 class="title">Modeling BPPV: physics, assumptions, and open questions in an interactive canal-and-cupula simulator</h1>
+    <p class="dek">A working account of what the simulator computes, why each constant and simplification was chosen, where the model's own comments flag it as provisional, and what would most improve it next.</p>
+    <div class="meta-row">
+      <span><strong>Subject</strong> bppv-simulator (Three.js / TypeScript)</span>
+      <span><strong>Scope</strong> physics layer + maneuver scripts + rendering</span>
+      <span><strong>Status</strong> living document, generated from source</span>
+    </div>
+  </div>
+
+  <div class="abstract">
+    <span class="label">Abstract</span>
+    <p>This simulator renders posterior- and horizontal-canal benign paroxysmal positional vertigo (BPPV) — both canalithiasis and cupulolithiasis variants — as an interactive 3D scene driven by a small chain of coupled physical models: canal geometry, an overdamped clot-transport model, a first-order cupula relaxation, and a vestibulo-ocular reflex (VOR) that produces torsional/vertical/horizontal nystagmus. Nearly every constant in the codebase carries an inline citation or a documented rationale, which this paper collects and organizes. The intent is diagnostic teaching, not clinical measurement: waypoint angles, hold durations, and settling speeds are compressed or approximated for legibility, and each such choice is flagged where it appears in the source. Several genuine open questions remain — a ~16&deg; vs ~30&deg; discrepancy in horizontal-canal tilt, an unverified geotropic/apogeotropic sign convention, and a short-arm re-entry pathway that is implemented but currently disabled pending tuning.</p>
+  </div>
+
+  <nav class="toc" aria-label="Table of contents">
+    <ol>
+      <li><span class="n">1</span><a href="#features">What the simulator does</a></li>
+      <li><span class="n">2</span><a href="#physics">Physics models</a></li>
+      <li><span class="n">3</span><a href="#assumptions">Assumptions &amp; simplifications</a></li>
+      <li><span class="n">4</span><a href="#sources">Data sources &amp; citations</a></li>
+      <li><span class="n">5</span><a href="#issues">Unresolved issues</a></li>
+      <li><span class="n">6</span><a href="#improvements">Proposed improvements</a></li>
+      <li><span class="n">7</span><a href="#close">Closing assessment</a></li>
+    </ol>
+  </nav>
+
+  <section id="features">
+    <h2><span class="num">1</span>What the simulator does</h2>
+    <p class="section-intro">A single-page app that lets a user place debris in one of two canals under one of two pathology mechanisms, drive the head through a diagnostic or repositioning maneuver, and watch the resulting eye movement play out in real time.</p>
+
+    <h3>Canals &amp; pathology <span class="tag">selectable</span></h3>
+    <p>Posterior and horizontal semicircular canals are modeled (anterior-canal anatomy exists in the underlying dataset but is not wired into the simulator). Each canal can be assigned <strong>canalithiasis</strong> (free-floating otoconial debris inside the duct) or <strong>cupulolithiasis</strong> (debris adherent directly to the cupula), the two recognized BPPV mechanisms. Cupulolithiasis carries a further <code>debrisOnUtricularSide</code> toggle distinguishing the geotropic and apogeotropic variants, most clinically relevant for the horizontal canal.</p>
+
+    <h3>Maneuvers <span class="tag">scripted playback</span></h3>
+    <ul>
+      <li><strong>Dix-Hallpike</strong> — posterior-canal diagnostic positioning.</li>
+      <li><strong>Epley</strong> — posterior-canal canalith repositioning procedure.</li>
+      <li><strong>Semont diagnostic &amp; liberatory</strong> — posterior-canal rapid-reposition maneuvers.</li>
+      <li><strong>Supine head-roll test</strong> (Pagnini&ndash;McClure) — horizontal-canal diagnostic.</li>
+      <li><strong>BBQ roll</strong> (Lempert) — horizontal-canal repositioning.</li>
+      <li><strong>Zuma e Maia maneuver</strong> — for apogeotropic horizontal-canal cupulolithiasis.</li>
+    </ul>
+    <p>Every maneuver is written as a single side-parametrized function rather than hand-mirrored left/right copies, and played back through a shared <code>ManeuverPlayer</code> that slerps between waypoint quaternions.</p>
+
+    <h3>Interaction modes</h3>
+    <p>Head orientation can come from scripted maneuver playback, free mouse-drag, or a device gyroscope &mdash; the same physics pipeline consumes all three via a common orientation-source interface.</p>
+
+    <h3>Visualization</h3>
+    <p>A 3D canal cutaway (idealized "basic" duct, a "realistic" real-anatomy glass overlay traced from cadaveric data, and a zoomed "detailed" schematic view of the ampulla/cupula/hair cells), an orientation gizmo, a toggleable gravity arrow (world-fixed or head-fixed), an eyeball scene rendering torsional, vertical, and horizontal nystagmus as three composed rotations, and a VNG-style trace plotting all three components over time.</p>
+  </section>
+
+  <section id="physics">
+    <h2><span class="num">2</span>Physics models</h2>
+    <p class="section-intro">Six coupled mechanisms carry the simulation from head orientation to eye movement. Each is a small, deliberately simplified model rather than a full fluid-dynamics simulation — chosen so its qualitative behavior (latency, fatigue, direction) matches the clinical picture.</p>
+
+    <h3>Canal geometry <span class="tag">canal.ts</span></h3>
+    <p>Each (canal, side) pair gets a cached orthonormal in-plane basis <code>(e1, e2)</code> built from a literature plane normal. A point on the duct is <code>R&middot;cos(s)&middot;e1 + R&middot;sin(s)&middot;e2</code>, with <code>s = 0</code> at the ampulla and increasing <code>s</code> ampullofugal. For the posterior canal, <code>e1</code> is anchored to gravity's in-plane projection when upright &mdash; making the ampulla the natural resting point. The horizontal canal cannot use that same trick (it would tautologically force the ampulla to be the low point regardless of real anatomy), so its <code>e1</code> is instead anchored to the real ampulla direction taken from cadaveric centerline data, and gravity's true resting arc position (~106&deg; from the ampulla) falls out as a computed quantity.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">CANAL_RADIUS_M</span><span class="val">0.0032 m</span><span class="note">duct radius, literature approx.</span></div>
+      <div class="const"><span class="name">S_MAX</span><span class="val">2&pi;&times;0.9</span><span class="note">radians of duct modeled</span></div>
+      <div class="const"><span class="name">S_COMMON_CRUS</span><span class="val">3.5 rad</span><span class="note">"cleared the duct" threshold</span></div>
+    </div>
+
+    <h3>Canalithiasis clot transport <span class="tag">canalith.ts</span></h3>
+    <p>An overdamped Stokes-drag model: instantaneous target velocity is proportional to gravity's tangential component at the clot's current position. Two temporal gates reproduce the clinical latency-then-paroxysm pattern rather than an instant response: a <strong>breakaway latency</strong> requiring a consistent driving direction sustained for <code>LATENCY_SECONDS</code> before any motion starts, and a first-order <strong>inertia lag</strong> toward the target velocity, giving a visible ramp-up and ramp-down rather than a snap.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">LATENCY_SECONDS</span><span class="val">2.5 s</span><span class="note">breakaway delay</span></div>
+      <div class="const"><span class="name">CLOT_INERTIA_TAU</span><span class="val">0.8 s</span><span class="note">velocity ramp time constant</span></div>
+    </div>
+    <p>Once the clot reaches the far wall (<code>s = S_MAX</code>) it is marked <code>clearedIntoUtricle</code> and frozen &mdash; a real otoconial mass swept into the utricle is mechanically lost to the duct's fluid dynamics, so an ordinary subsequent head tilt cannot "un-clear" it. That freeze is deliberately keyed to full settlement rather than the earlier <code>S_COMMON_CRUS</code> threshold, so a maneuver still mid-sweep through the crus-to-utricle stretch stays reversible.</p>
+
+    <h3>Cupula relaxation <span class="tag">cupula.ts</span></h3>
+    <p>A semi-implicit first-order relaxation toward a drive-proportional deflection: <code>&beta;<sub>new</sub> = (&beta;<sub>old</sub> + &kappa;&middot;dsdt&middot;dt) / (1 + dt/&tau;)</code>. Fatigue and decay patterns emerge from this single relaxation rather than being separately scripted.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">KAPPA_FLOW</span><span class="val">1.0</span><span class="note">flow-to-deflection gain</span></div>
+      <div class="const"><span class="name">TAU_CUPULA</span><span class="val">4.0 s</span><span class="note">relaxation time constant</span></div>
+    </div>
+
+    <h3>Cupulolithiasis drive <span class="tag">cupulolithiasis.ts</span></h3>
+    <p>Debris fixed at <code>s = 0</code> feeds the same relaxation with a drive proportional to gravity's tangential component <em>at that fixed point</em> &mdash; no position to integrate, no breakaway latency, no clot inertia. This reproduces the distinguishing clinical signature of cupulolithiasis: minimal-latency, non-fatiguing nystagmus that persists for as long as the provoking position is held, converging to a steady-state deflection <code>&beta;<sub>ss</sub> = &kappa;&middot;&tau;&middot;CUPULA_GRAVITY_GAIN&middot;g<sub>component</sub></code>.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">CUPULA_GRAVITY_GAIN</span><span class="val">0.08</span><span class="note">calibrated so peak deflection matches canalithiasis's own paroxysm magnitude</span></div>
+    </div>
+
+    <h3>Canal-specific mechanical release <span class="tag">cupulaRelease.ts</span></h3>
+    <p>A rapid head movement can mechanically knock cupula-adherent debris loose, converting cupulolithiasis into free-floating canalithiasis mid-maneuver. Release is triggered when the smoothed angular acceleration <em>about that specific canal's own plane-normal axis</em> exceeds a threshold &mdash; projecting onto the canal's own axis (rather than raw omnidirectional angular speed) is what makes a posterior-plane maneuver like Semont release posterior debris without also releasing horizontal debris.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">RELEASE_DECEL_THRESHOLD</span><span class="val">13 rad/s&sup2;</span><span class="note">scripted maneuvers</span></div>
+      <div class="const"><span class="name">INTERACTIVE_RELEASE_DECEL_THRESHOLD</span><span class="val">40 rad/s&sup2;</span><span class="note">mouse/gyro, ~3&times; higher</span></div>
+      <div class="const"><span class="name">RELEASE_ACCEL_SMOOTHING_TAU</span><span class="val">0.1 s</span><span class="note">low-pass before differentiating</span></div>
+    </div>
+
+    <h3>Short-arm re-entry <span class="tag">shortArmReentry.ts &middot; disabled</span></h3>
+    <p>A distinct short passage directly between the utricle and the ampulla (alongside the main long-arm duct already modeled), through which settled debris can slide back in if a repositioning maneuver's final seated position isn't tilted nose-down enough. Modeled as two straight segments through an approximate waypoint, with the same latency-and-inertia structure as ordinary canalithiasis but independently time-scaled. This pathway exists in the code but is currently switched off in the running app (see &sect;5).</p>
+
+    <h3>VOR &amp; Ewald's laws <span class="tag">vor.ts</span></h3>
+    <p>Slow-phase eye velocity is <code>gain&times;&beta;</code>, with gain reduced for inhibitory-direction flow &mdash; Ewald's second law, that excitatory (ampullofugal for vertical canals, ampullopetal for the horizontal canal) responses are larger than inhibitory ones. A quick-phase reset fires once accumulated eye angle exceeds a threshold. The single combined eye rotation (about the canal's own tilted plane normal) is then linearly decomposed onto torsional, vertical, and horizontal axes via direction cosines &mdash; an approximation valid at the modest deviation angles the simulator operates at, not a full 3D Euler decomposition.</p>
+    <div class="const-grid">
+      <div class="const"><span class="name">GAIN_VOR</span><span class="val">0.6</span><span class="note">excitatory-direction gain</span></div>
+      <div class="const"><span class="name">INHIBITORY_GAIN_FRACTION</span><span class="val">0.5</span><span class="note">Ewald's-second-law asymmetry</span></div>
+      <div class="const"><span class="name">QUICK_PHASE_THRESHOLD</span><span class="val">0.35 rad</span><span class="note">reset trigger</span></div>
+    </div>
+  </section>
+
+  <section id="assumptions">
+    <h2><span class="num">3</span>Assumptions &amp; simplifications</h2>
+    <p class="section-intro">Every item below is flagged in the source itself as a deliberate approximation, not silently smoothed over.</p>
+    <ul>
+      <li><strong>Geotropic/apogeotropic sign as a single flip.</strong> <code>debrisOnUtricularSide</code> stands in for a full attachment-geometry model and is explicitly not independently verified against real clinical VOG recordings.</li>
+      <li><strong>Clot inertia as a visualization device.</strong> <code>CLOT_INERTIA_TAU</code> is documented as standing in for the clinically-described acceleration/deceleration phases, not a literal second-order mass-and-drag derivation.</li>
+      <li><strong>Teaching-time compression.</strong> The mobility constant driving clot speed is a physically-derived value multiplied by a <code>TEACHING_MODE_TIME_SCALE</code> of 19&times; purely for legibility &mdash; a real-time mode is not implemented, though the underlying physical constant is retained in code for future use. The same compression is applied independently to the short-arm pathway and to every scripted maneuver's hold durations (Zuma's real ~3-minute holds compress to roughly 20 seconds on screen).</li>
+      <li><strong>Linear eye-decomposition.</strong> Torsional/vertical/horizontal components come from projecting one combined rotation onto three fixed direction cosines, valid only at the modest deflection angles this simulator produces.</li>
+      <li><strong>Short-arm geometry as two straight segments</strong> through an approximate waypoint, rather than a traced centerline &mdash; a smooth spline was explicitly judged as "false precision" given the underlying data's own resolution.</li>
+      <li><strong>Horizontal-canal tilt magnitude</strong> comes out ~16&deg; from true horizontal in this model, versus a commonly quoted ~30&deg; in clinical teaching &mdash; left as a flagged, unresolved discrepancy rather than force-fit (see &sect;5).</li>
+      <li><strong>Maneuver waypoint angles are teaching approximations</strong>, not patient-specific or clinically validated positioning angles.</li>
+      <li><strong>Cupula elevation direction in the 3D scene is schematic.</strong> An earlier attempt to derive it from real per-canal cupula landmarks was tried and rejected: those landmarks turned out to be mostly in-plane with the canal (dot product only ~0.1&ndash;0.15 with the plane normal), which would have rendered debris 5&ndash;7&nbsp;mm off target.</li>
+      <li><strong>Mesh alignment by translation only,</strong> not rotation &mdash; per-canal rotation of the whole real-anatomy assembly was tried and rejected in favor of plain translation.</li>
+      <li><strong>The Zuma maneuver is a pure kinematic waypoint sequence,</strong> not coupled to a forced pathology or debris-side selection &mdash; a known, named simplification.</li>
+      <li><strong>Anterior canal is entirely unmodeled</strong> in the physics layer, despite its anatomy existing in the underlying dataset.</li>
+    </ul>
+  </section>
+
+  <section id="sources">
+    <h2><span class="num">4</span>Data sources &amp; citations</h2>
+    <p class="section-intro">Every numeric constant traceable to a real source, and what it was used for.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Used for</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Wu et al., <em>Measurement of Human Semicircular Canal Spatial Attitude</em>, Front Neurol. 2021;12:741948</td>
+            <td>Literature canal-plane normal vectors for posterior and horizontal canals; cross-check for peak torsional slow-phase velocity (~38&deg;/s median).</td>
+          </tr>
+          <tr>
+            <td>Della Santina et al., 2005 (via Reid's stereotaxic coordinates)</td>
+            <td>Independent cross-check reconstruction of the posterior-canal plane normal.</td>
+          </tr>
+          <tr>
+            <td>Yang &amp; Yang, <em>Mechanisms and clinical significance of Tumarkin-like phenomenon&hellip;</em>, Front. Neurol. 2025;16:1547798</td>
+            <td>Empirical otoconia settling speed (2&times;10&#8315;&#8308; m/s); short-arm re-entry mechanism description; the clinical adherence-window protocol behind <code>ADHERENCE_WINDOW_SECONDS</code>.</td>
+          </tr>
+          <tr>
+            <td>Parnes, Agrawal &amp; Atlas, <em>Diagnosis and management of BPPV</em>, CMAJ 2003;169(7):681&ndash;93</td>
+            <td>Table 1 calibration of the Ewald's-second-law inhibitory-gain fraction; clinical illustrations informing the debris-cluster and ampulla/cupula visual style.</td>
+          </tr>
+          <tr>
+            <td>Zuma e Maia, <em>New Treatment Strategy for Apogeotropic HC-BPPV</em> (PMC5134676)</td>
+            <td>Full Zuma maneuver step sequence and its rapid-vs-gentle transition timing.</td>
+          </tr>
+          <tr>
+            <td>IEMap_data_v_1_0 dataset</td>
+            <td>Real per-canal duct centerline stations, cupula landmarks, and ampulla/utricle/saccule mesh geometry &mdash; both as a physics input (horizontal-canal ampulla anchor) and as the "realistic"/"detailed" 3D scene overlay.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="issues">
+    <h2><span class="num">5</span>Unresolved issues</h2>
+    <p class="section-intro">Flagged directly in the source as open, disabled, or unverified.</p>
+
+    <div class="flag">
+      <span class="label">Disabled feature</span>
+      Short-arm re-entry is implemented but switched off in the running app (<code>SHORT_ARM_REENTRY_ENABLED = false</code>) &mdash; it was firing too easily in practice and is disabled pending further tuning, without deleting the pathway itself.
+    </div>
+    <div class="flag">
+      <span class="label">Unresolved discrepancy</span>
+      The horizontal canal's derived tilt (~16&deg; from true horizontal) is smaller than the ~30&deg; commonly quoted in clinical teaching for "nose-down to bring the horizontal canal into true horizontal." Flagged as a magnitude question, not a sign question &mdash; the coplanarity cross-checks strongly support the direction being correct.
+    </div>
+    <div class="flag">
+      <span class="label">Unverified against clinical data</span>
+      The <code>debrisOnUtricularSide</code> geotropic/apogeotropic sign convention has not been independently checked against real VOG recordings.
+    </div>
+    <div class="flag">
+      <span class="label">Estimated, not measured</span>
+      The interactive release threshold's ~3&times; scaling relative to the scripted-maneuver threshold has no independent interactive-specific acceleration data behind it &mdash; it mirrors the ratio used for the predecessor speed-based threshold.
+    </div>
+    <div class="flag">
+      <span class="label">Known alignment tolerance</span>
+      The real-anatomy overlay's axes sit ~7.7&deg; (posterior) and ~8.5&deg; (horizontal) off the literature plane-normal directions, and centerline-to-mesh position agreement holds to within roughly 0.2&ndash;0.3&nbsp;mm, not exactly.
+    </div>
+    <div class="flag">
+      <span class="label">Not yet built</span>
+      No uncompressed, real-time physics mode exists; the underlying physical mobility constant is exported and ready, but nothing in the UI currently exposes it.
+    </div>
+  </section>
+
+  <section id="improvements">
+    <h2><span class="num">6</span>Proposed improvements</h2>
+    <p class="section-intro">Ranked roughly by how directly each closes a gap already named in &sect;5, from clinical-accuracy work to teaching-experience polish.</p>
+
+    <div class="improve">
+      <h4>Re-tune and re-enable short-arm re-entry<span class="impact">clinical accuracy</span></h4>
+      <p>The pathway is built and citation-backed but disabled because it fires too easily. Re-deriving its mobility scale from the same empirical settling speed used elsewhere, rather than an independently chosen teaching multiplier, would let it ship without a second ad hoc constant.</p>
+    </div>
+    <div class="improve">
+      <h4>Validate the geotropic/apogeotropic sign against real VOG traces<span class="impact">clinical accuracy</span></h4>
+      <p>A single sign flip currently stands in for the full attachment-geometry distinction. Comparing simulated horizontal-canal nystagmus direction against published geotropic vs. apogeotropic VOG recordings would either confirm the shortcut or reveal where it breaks down.</p>
+    </div>
+    <div class="improve">
+      <h4>Resolve the horizontal-canal tilt discrepancy<span class="impact">anatomical fidelity</span></h4>
+      <p>Reconciling the derived ~16&deg; figure against the clinically quoted ~30&deg; &mdash; likely by cross-checking against a second independent anatomical dataset &mdash; would settle a magnitude question the codebase currently just documents rather than resolves.</p>
+    </div>
+    <div class="improve">
+      <h4>Full 3D eye-rotation decomposition<span class="impact">physics depth</span></h4>
+      <p>Replacing the linear direction-cosine projection with a proper Euler/quaternion decomposition would remove the small-angle caveat and let the eye model handle larger provoked deflections accurately, e.g. for exaggerated teaching demonstrations.</p>
+    </div>
+    <div class="improve">
+      <h4>Expose an uncompressed, real-time physics mode<span class="impact">feature</span></h4>
+      <p>The physically-derived mobility constant already exists in code; surfacing a toggle between "teaching speed" and "real time" would let advanced users see genuine clinical timing (multi-minute Zuma holds and all) without touching the underlying model.</p>
+    </div>
+    <div class="improve">
+      <h4>Model the anterior canal<span class="impact">coverage</span></h4>
+      <p>Anatomical data for the anterior canal already exists in the underlying dataset; wiring it through the same canal-basis/canalith/cupula pipeline would complete coverage of all three canal pairs, at the cost of a rarer clinical presentation.</p>
+    </div>
+    <div class="improve">
+      <h4>Independent interactive-release calibration<span class="impact">physics depth</span></h4>
+      <p>Capturing real mouse-drag/gyro acceleration traces from users and measuring where accidental release actually starts would replace the current borrowed 3&times; scaling factor with a measured one.</p>
+    </div>
+    <div class="improve">
+      <h4>Scenario presets and a guided teaching mode<span class="impact">teaching experience</span></h4>
+      <p>A short set of named starting configurations (e.g. "apogeotropic horizontal cupulolithiasis, right ear") with a guided walkthrough of the matching maneuver would lower the barrier for students encountering the simulator without prior canal-selector familiarity.</p>
+    </div>
+  </section>
+
+  <section id="close">
+    <h2><span class="num">7</span>Closing assessment</h2>
+    <p>The simulator's defining trait is not any single physical model &mdash; each mechanism (Stokes-drag clot transport, first-order cupula relaxation, linear VOR gain) is intentionally simple &mdash; but the discipline with which every simplification, citation, and rejected alternative is recorded next to the code it governs. That makes the open questions in &sect;5 tractable rather than hidden: each is a specific, scoped, already-partially-investigated gap rather than an undocumented guess. The improvements in &sect;6 are, in that sense, mostly a matter of finishing work the codebase has already started and flagged for itself.</p>
+  </section>
+
+  <footer>
+    Generated from the bppv-simulator source tree &middot; sections reflect the state of <span class="ref">src/physics/</span>, <span class="ref">src/maneuvers/</span>, and <span class="ref">src/scene/</span> at time of writing.
+  </footer>
+
+</div>
