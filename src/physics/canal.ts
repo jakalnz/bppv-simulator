@@ -164,29 +164,49 @@ const HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M: Vec3 = applyAnatomyTiltCorrection(
 );
 
 /**
- * TRIED AND REVERTED, feature-branch only: anchoring the posterior canal's e1 to its own
- * real ampulla position (scene/earAnatomy.json's posterior.ampullaAnchor, IEMap dataset)
- * the same way the horizontal canal's e1 is anchored above. Numerically this put the
- * posterior canal's resting arc position at ~320 degrees (nearly swept to the common
- * crus) -- clinically implausible, since free posterior-canal debris is well established
- * to rest near the ampulla when upright.
+ * TRIED AND REVERTED, feature-branch only (twice, independently): anchoring the
+ * posterior canal's e1 to its own real ampulla position (scene/earAnatomy.json's
+ * posterior.ampullaAnchor, IEMap dataset) the same way the horizontal canal's e1 is
+ * anchored above. Numerically this put the posterior canal's resting arc position at
+ * ~310-320 degrees (only ~3.7-14.3 degrees of margin from S_MAX, depending on whether
+ * ANATOMY_TILT_CORRECTION_DEG is also applied) -- clinically implausible and numerically
+ * fragile: with that little clearance, an ordinary Dix-Hallpike supine tilt immediately
+ * clamps the clot against the wall, making lying down look like a spontaneous cure.
  *
- * Root cause: CANAL_PLANE_NORMAL.posterior comes from Wu et al. 2021 (a literature
- * measurement), while this IEMap ampulla anchor comes from a DIFFERENT, independent
- * cadaver specimen. Checked directly: the angle between Wu et al.'s posterior normal and
- * IEMap's own posterior normal is ~79.6 degrees -- nowhere close to describing the same
- * plane. As a sanity check, combining IEMap's OWN normal with IEMap's OWN anchor (both
- * from the same specimen, unlike the cross-source combination attempted here) gives a
- * resting point around ~45.6 degrees -- plausibly near the ampulla -- confirming the
- * anchor-based approach isn't wrong in principle, only invalid to mix with a normal from
- * a different source.
+ * First attempt's diagnosis (mixing Wu et al.'s posterior normal with a
+ * different-specimen IEMap anchor) was WRONG -- re-checked properly (mirroring the
+ * literature normal to the right ear before comparing, matching
+ * scripts/build-ear-assets/build.mjs's own build-time validation), the two datasets'
+ * PLANES agree to ~7.7 degrees, comfortably within normal anatomical variation. A second
+ * attempt then found the two datasets' SIGNED normals point in nearly opposite
+ * directions (a plane's normal is only defined up to sign, and neither source fixes it
+ * against a shared convention) and tried flipping BASE_HANDEDNESS_USES_E1_CROSS_N.
+ * posterior to compensate -- that made things WORSE, breaking four independently-verified
+ * sign tests at once (Dix-Hallpike, Semont, VOR torsional direction, cupulolithiasis
+ * geotropic/apogeotropic sign). Checked directly against the real duct centerline
+ * (scene/earAnatomy.json, same technique already used to settle the horizontal canal's
+ * own handedness): dot(real away-from-ampulla direction, e1 x n) ~ +0.99 with the
+ * ORIGINAL, unflipped handedness, versus ~ -0.99 flipped -- unambiguous confirmation the
+ * original handedness was never the problem. (Provable in general, too: e1 x (e1 x n) = n
+ * identically for any unit e1 perpendicular to n, so rotating e1 within a fixed-n plane
+ * cannot change which handedness is correct -- unlike the horizontal canal's case, which
+ * changed something else.)
  *
- * A proper fix would mean switching the posterior canal's physics normal to IEMap's own
- * value and re-verifying every cross-check currently backing Wu et al.'s normal (the
- * RALP/LARP coplanarity check, the Della Santina cross-reconstruction, the handedness/
- * sign tests) against the new one -- a bigger undertaking than this experiment, so the
- * posterior canal is left on the gravity-anchored e1 below (see e1Direction), which
- * sidesteps the mismatch entirely by never needing an external anchor for this canal.
+ * With handedness settled, what remains is a genuine PLACEMENT problem, not a sign bug --
+ * and the real duct centerline data actually explains why, decisively: this canal's
+ * right-ear centerline stations (ampulla-first) have HeadFrame Z-coordinates
+ * -0.00337, -0.00272, -0.0000491, +0.00243, +0.00252 -- MONOTONICALLY INCREASING away
+ * from the ampulla. Gravity upright points -Z, so the real duct's most-dependent point
+ * IS the ampulla -- the gravity-anchored e1 below isn't a simplification standing in for
+ * an unmeasured real anchor, it's independently confirmed correct by the same real
+ * dataset the anchor-based attempt was trying to use. This is the OPPOSITE of the
+ * horizontal canal, whose own centerline Z decreases monotonically away from its ampulla
+ * (see e1Direction's doc comment) -- i.e. the posterior/horizontal asymmetry in this
+ * file (one gravity-anchored, one real-anchored) is a deliberate, data-justified
+ * difference between the two canals' real geometry, not an inconsistency to resolve by
+ * treating them the same. The ~310-320 degree number above is an artifact of forcing a
+ * real landmark onto an idealized circle it was never a good fit for, not a hidden truth
+ * the idealized model was suppressing.
  */
 const AMPULLA_ANCHOR_RIGHT_M: Partial<Record<CanalType, Vec3>> = {
   horizontal: HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M,
