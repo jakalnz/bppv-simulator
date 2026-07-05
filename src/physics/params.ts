@@ -199,13 +199,7 @@ export const CUPULA_GRAVITY_GAIN = 0.08;
  * doesn't load a given canal's plane shouldn't release that canal's debris, even if the
  * head is moving fast overall. Confirmed against every existing maneuver (see
  * physics/cupulaRelease.test.ts, the actual arbiter if maneuver waypoint timings
- * change): projected onto the POSTERIOR canal's axis, gentle maneuvers peak <= ~11.3
- * rad/s^2 and Semont/Zuma peak >= ~15.1; projected onto the HORIZONTAL canal's axis,
- * gentle maneuvers (and Semont, which is a posterior-plane maneuver) peak <= ~9.4 and
- * only Zuma (a horizontal-canal maneuver) exceeds it at ~18.8. A single threshold in the
- * gap between those clusters (~13) discriminates both canals correctly, producing a
- * clinically sensible per-(maneuver, canal) release pattern: Semont detaches posterior
- * debris only, Zuma detaches both, gentle repositioning maneuvers detach neither.
+ * change).
  *
  * The signal fed into this threshold is smoothed first (see RELEASE_ACCEL_SMOOTHING_TAU)
  * -- an earlier attempt using RAW single-frame angular deceleration (no smoothing)
@@ -216,8 +210,19 @@ export const CUPULA_GRAVITY_GAIN = 0.08;
  * artifact (a discontinuity smoothed over RELEASE_ACCEL_SMOOTHING_TAU produces a much
  * smaller derivative peak than the same discontinuity taken raw over one frame), which
  * is what makes a clean threshold on the smoothed derivative possible at all.
+ *
+ * EXPERIMENTAL BRANCH NOTE (see canal.ts's ANATOMY_TILT_CORRECTION_DEG): applying the
+ * 14-degree whole-ear tilt correction shrank the posterior-canal discrimination gap
+ * considerably -- gentle maneuvers now peak <= ~12.0 rad/s^2 and Semont/Zuma peak >=
+ * ~12.8, versus <= ~11.3 / >= ~15.1 before the tilt. Retuned down from 13 to 12.4 to sit
+ * back in the (now much narrower) gap; horizontal-canal discrimination is largely
+ * unaffected (gentle maneuvers, including posterior-plane Semont, stay <= ~10.6, only
+ * Zuma exceeds at ~20.3). The narrower posterior margin is a genuine side effect of
+ * tilting the posterior canal's own literature normal by the same correction as the
+ * horizontal canal's, not a tuning mistake -- worth weighing against the tilt's benefit
+ * to the horizontal-canal angle before merging this experiment.
  */
-export const RELEASE_DECEL_THRESHOLD = 13;
+export const RELEASE_DECEL_THRESHOLD = 12.4;
 
 /**
  * Threshold used for interactive orientation sources (mouse-drag/gyro, see main.ts's
