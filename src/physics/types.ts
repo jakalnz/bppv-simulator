@@ -96,3 +96,27 @@ export function quatAngleBetween(a: Quat, b: Quat): number {
 
 export const DEG2RAD = Math.PI / 180;
 export const RAD2DEG = 180 / Math.PI;
+
+/**
+ * Angular velocity (rad/s) of the head between two consecutive orientations, expressed
+ * as a vector in the HEAD (body) frame -- not just the scalar speed quatAngleBetween
+ * gives. Needed to project rotation onto a specific canal's own axis (see
+ * physics/cupulaRelease.ts), since a given angular speed only actually drives a
+ * particular canal to the extent the rotation axis aligns with that canal's plane
+ * normal -- a rotation entirely about some other axis should not count for it.
+ *
+ * qPrev and qCurr both map head->world (see rotateVec's doc comment). The relative
+ * rotation q_rel = qPrev^-1 * qCurr maps head_curr -> head_prev, i.e. describes the
+ * reorientation in a frame that is (for small dt) approximately the body frame -- so its
+ * axis-angle, divided by dt, is the body-frame angular velocity vector.
+ */
+export function angularVelocityBody(qPrev: Quat, qCurr: Quat, dt: number): Vec3 {
+  const qRel = quatCompose(quatInvert(qPrev), qCurr);
+  const axis = vec3.create();
+  const angle = quat.getAxisAngle(axis, qRel);
+  // getAxisAngle returns an angle in [0, 2*pi]; treat >pi as the equivalent short
+  // rotation the other way so this doesn't report an inflated near-2*pi angular speed
+  // for what's actually a small reversed-axis rotation.
+  const signedAngle = angle > Math.PI ? angle - 2 * Math.PI : angle;
+  return scale(axis, signedAngle / dt);
+}

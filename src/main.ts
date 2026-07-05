@@ -1,10 +1,10 @@
-import { Quat, quatAngleBetween, quatInvert, rotateVec } from './physics/types';
+import { Quat, angularVelocityBody, quatInvert, rotateVec } from './physics/types';
 import {
   G_WORLD,
   LATENCY_SECONDS,
   ADHERENCE_WINDOW_SECONDS,
-  RAPID_SPEED_THRESHOLD,
-  INTERACTIVE_RAPID_SPEED_THRESHOLD,
+  RELEASE_DECEL_THRESHOLD,
+  INTERACTIVE_RELEASE_DECEL_THRESHOLD,
 } from './physics/params';
 import { CanalithState, initialCanalithState, canalithStateAtAmpulla, updateCanalith, isCleared } from './physics/canalith';
 import { ShortArmPath, ShortArmState, initialShortArmState, updateShortArm } from './physics/shortArmReentry';
@@ -12,7 +12,7 @@ import { updateCupula, relaxOnly } from './physics/cupula';
 import { cupulolithiasisDrive } from './physics/cupulolithiasis';
 import { CupulaReleaseDetector, initialReleaseDetector, updateReleaseDetector } from './physics/cupulaRelease';
 import { updateVor, initialVorState, VorState, decomposeEyeMovement } from './physics/vor';
-import { CanalSelector, CanalType, Pathology, S_COMMON_CRUS } from './physics/canal';
+import { CanalSelector, CanalType, Pathology, CANAL_PLANE_NORMAL, S_COMMON_CRUS } from './physics/canal';
 import earAnatomyData from './scene/earAnatomy.json';
 
 import { Maneuver } from './maneuvers/types';
@@ -384,20 +384,23 @@ function stepPhysicsOnce(dt: number): void {
 
   const gHead = rotateVec(quatInvert(qHead), G_WORLD);
 
-  // Angular speed since last tick, and whether that constitutes a rapid-movement-then-
-  // stop event -- see physics/cupulaRelease.ts for why this is a smoothed hysteresis
-  // crossing detector (not a raw instantaneous check), which is what makes it safe to
-  // evaluate regardless of orientation source (scripted maneuver, mouse-drag, or gyro).
-  const angularSpeed = quatAngleBetween(prevQHeadForVelocity, qHead) / dt;
+  // Angular velocity since last tick, projected onto THIS canal's own axis, and whether
+  // the resulting smoothed angular acceleration constitutes a mechanical release event
+  // -- see physics/cupulaRelease.ts for why this is a smoothed edge-crossing detector
+  // (not a raw instantaneous check), which is what makes it safe to evaluate regardless
+  // of orientation source (scripted maneuver, mouse-drag, or gyro), and canal-SPECIFIC
+  // rather than triggering on any fast rotation regardless of axis.
+  const omegaBody = angularVelocityBody(prevQHeadForVelocity, qHead, dt);
   prevQHeadForVelocity = qHead;
   let released: boolean;
-  // Interactive sources (mouse-drag/gyro) get a much higher arm threshold than scripted
-  // maneuvers -- see INTERACTIVE_RAPID_SPEED_THRESHOLD's doc comment: the default is
-  // precisely calibrated to each maneuver's own scripted waypoint speeds, but ordinary
-  // brisk interactive movement (no scripted pacing behind it) easily exceeded it,
-  // accidentally converting cupulolithiasis into canalithiasis.
-  const rapidSpeedThreshold = mode === 'maneuver' ? RAPID_SPEED_THRESHOLD : INTERACTIVE_RAPID_SPEED_THRESHOLD;
-  [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, dt, rapidSpeedThreshold);
+  // Interactive sources (mouse-drag/gyro) get a much higher threshold than scripted
+  // maneuvers -- see INTERACTIVE_RELEASE_DECEL_THRESHOLD's doc comment: the default is
+  // precisely calibrated to each maneuver's own scripted waypoint accelerations, but
+  // ordinary brisk interactive movement (no scripted pacing behind it) easily exceeded
+  // it, accidentally converting cupulolithiasis into canalithiasis.
+  const decelThreshold = mode === 'maneuver' ? RELEASE_DECEL_THRESHOLD : INTERACTIVE_RELEASE_DECEL_THRESHOLD;
+  const canalAxis = CANAL_PLANE_NORMAL[selector.canal][selector.side];
+  [releaseDetector, released] = updateReleaseDetector(releaseDetector, omegaBody, canalAxis, dt, decelThreshold);
   if (selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased && released) {
     cupulaDebrisReleased = true;
     // Debris starts its free-floating life at the ampulla (s=0), same convention as
@@ -553,8 +556,8 @@ if (import.meta.env.DEV) {
     renderFrame();
   };
   (window as unknown as { __bppvDebugReleaseState: () => unknown }).__bppvDebugReleaseState = () => ({
-    armed: releaseDetector.armed,
-    smoothedSpeed: releaseDetector.smoothedSpeed,
+    above: releaseDetector.above,
+    smoothedOmega: releaseDetector.smoothedOmega,
     cupulaDebrisReleased,
     mode,
   });

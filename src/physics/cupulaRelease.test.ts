@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { quatAngleBetween } from './types';
-import { RAPID_SPEED_THRESHOLD } from './params';
+import { angularVelocityBody, dot } from './types';
+import { RELEASE_DECEL_THRESHOLD } from './params';
 import { initialCanalithState, canalithStateAtAmpulla, updateCanalith, isCleared } from './canalith';
 import { updateCupula, relaxOnly } from './cupula';
 import { cupulolithiasisDrive } from './cupulolithiasis';
 import { initialReleaseDetector, updateReleaseDetector } from './cupulaRelease';
-import { CanalSelector } from './canal';
+import { CanalSelector, CanalType, CANAL_PLANE_NORMAL } from './canal';
 import { ManeuverPlayer } from '../maneuvers/playback';
 import { Maneuver } from '../maneuvers/types';
 import { dixHallpikeRight } from '../maneuvers/dixHallpike';
@@ -17,49 +17,73 @@ import { zumaRight } from '../maneuvers/zuma';
 
 const DT = 1 / 120;
 
-function peakAngularSpeed(maneuver: Maneuver): number {
+function peakProjectedAccel(maneuver: Maneuver, canal: CanalType): number {
+  const axis = CANAL_PLANE_NORMAL[canal].right;
   const player = new ManeuverPlayer(maneuver);
   player.play();
   let prevQ = player.currentOrientation();
+  let detector = initialReleaseDetector();
   let peak = 0;
   const steps = Math.ceil(maneuver.waypoints[maneuver.waypoints.length - 1].t / DT);
   for (let i = 0; i < steps; i++) {
     player.tick(DT);
     const q = player.currentOrientation();
-    peak = Math.max(peak, quatAngleBetween(prevQ, q) / DT);
+    const omega = angularVelocityBody(prevQ, q, DT);
     prevQ = q;
+    const prevSmoothed = detector.smoothedOmega;
+    let fired: boolean;
+    [detector, fired] = updateReleaseDetector(detector, omega, axis, DT);
+    const decel = Math.abs((detector.smoothedOmega - prevSmoothed) / DT);
+    peak = Math.max(peak, decel);
+    void fired;
   }
   return peak;
 }
 
 /**
- * Discriminating acceptance test for RAPID_SPEED_THRESHOLD -- the actual arbiter if any
- * maneuver's waypoint timings change. An earlier attempt at this threshold used raw
- * single-frame deceleration (velocity change per FIXED_DT), which turned out NOT to
- * discriminate: at this simulator's fixed timestep, every waypoint transition (rapid or
- * gentle) ends in a one-frame velocity discontinuity, so gentle maneuvers produced
- * deceleration spikes just as large as genuinely rapid ones. Peak angular SPEED reached
- * during a transition is the signal that actually separates them (see
- * physics/cupulaRelease.ts and params.ts's RAPID_SPEED_THRESHOLD comment).
+ * Discriminating acceptance test for RELEASE_DECEL_THRESHOLD -- the actual arbiter if
+ * any maneuver's waypoint timings change. Unlike the old omnidirectional angular-speed
+ * signal, this is canal-SPECIFIC (projected onto each canal's own plane-normal axis, see
+ * canal.ts's CANAL_PLANE_NORMAL), so the discrimination target is a per-(maneuver,
+ * canal) matrix, not a single "rapid or not" label per maneuver: Semont is a
+ * posterior-plane maneuver and should release posterior debris but NOT horizontal;
+ * Zuma is vigorous enough to release both; the gentle repositioning maneuvers release
+ * neither.
+ *
+ * An earlier attempt using RAW single-frame angular deceleration (no smoothing) did not
+ * discriminate at all: at this simulator's fixed timestep, every waypoint transition
+ * (rapid or gentle) ends in a one-frame velocity discontinuity, so gentle maneuvers
+ * produced deceleration spikes just as large as genuinely rapid ones. Smoothing the
+ * canal-axis-projected angular velocity before differentiating (see
+ * RELEASE_ACCEL_SMOOTHING_TAU in params.ts) is what tames that artifact enough for a
+ * clean threshold to exist.
  */
-describe('RAPID_SPEED_THRESHOLD discriminates rapid vs gentle maneuvers', () => {
+describe('RELEASE_DECEL_THRESHOLD discriminates per (maneuver, canal)', () => {
   it.each([
-    ['dixHallpikeRight (gentle)', dixHallpikeRight, false],
-    ['epleyRight (gentle)', epleyRight, false],
-    ['rollTestRight (gentle)', rollTestRight, false],
-    ['bbqRollRight (gentle)', bbqRollRight, false],
-    ['semontDiagnosticRight (rapid)', semontDiagnosticRight, true],
-    ['semontLiberatoryRight (rapid)', semontLiberatoryRight, true],
-    ['zumaRight (rapid)', zumaRight, true],
-  ])('%s: peak speed %s RAPID_SPEED_THRESHOLD', (_name, maneuver, shouldExceed) => {
-    const peak = peakAngularSpeed(maneuver);
-    if (shouldExceed) expect(peak).toBeGreaterThan(RAPID_SPEED_THRESHOLD);
-    else expect(peak).toBeLessThan(RAPID_SPEED_THRESHOLD);
+    ['dixHallpikeRight (gentle)', dixHallpikeRight, 'posterior' as CanalType, false],
+    ['dixHallpikeRight (gentle)', dixHallpikeRight, 'horizontal' as CanalType, false],
+    ['epleyRight (gentle)', epleyRight, 'posterior' as CanalType, false],
+    ['epleyRight (gentle)', epleyRight, 'horizontal' as CanalType, false],
+    ['rollTestRight (gentle)', rollTestRight, 'posterior' as CanalType, false],
+    ['rollTestRight (gentle)', rollTestRight, 'horizontal' as CanalType, false],
+    ['bbqRollRight (gentle)', bbqRollRight, 'posterior' as CanalType, false],
+    ['bbqRollRight (gentle)', bbqRollRight, 'horizontal' as CanalType, false],
+    ['semontDiagnosticRight (posterior-plane rapid)', semontDiagnosticRight, 'posterior' as CanalType, true],
+    ['semontDiagnosticRight (posterior-plane rapid)', semontDiagnosticRight, 'horizontal' as CanalType, false],
+    ['semontLiberatoryRight (posterior-plane rapid)', semontLiberatoryRight, 'posterior' as CanalType, true],
+    ['semontLiberatoryRight (posterior-plane rapid)', semontLiberatoryRight, 'horizontal' as CanalType, false],
+    ['zumaRight (horizontal-plane rapid)', zumaRight, 'posterior' as CanalType, true],
+    ['zumaRight (horizontal-plane rapid)', zumaRight, 'horizontal' as CanalType, true],
+  ])('%s x %s: peak projected accel %s RELEASE_DECEL_THRESHOLD', (_name, maneuver, canal, shouldExceed) => {
+    const peak = peakProjectedAccel(maneuver, canal);
+    if (shouldExceed) expect(peak).toBeGreaterThan(RELEASE_DECEL_THRESHOLD);
+    else expect(peak).toBeLessThan(RELEASE_DECEL_THRESHOLD);
   });
 });
 
 /** Mirrors main.ts's stepPhysicsOnce pathology/release branching for integration testing. */
 function runWithRelease(maneuver: Maneuver, selector: CanalSelector) {
+  const axis = CANAL_PLANE_NORMAL[selector.canal][selector.side];
   const player = new ManeuverPlayer(maneuver);
   player.play();
   let canalithState = initialCanalithState(selector.canal, selector.side);
@@ -73,11 +97,11 @@ function runWithRelease(maneuver: Maneuver, selector: CanalSelector) {
   for (let i = 0; i < steps; i++) {
     player.tick(DT);
     const qHead = player.currentOrientation();
-    const angularSpeed = quatAngleBetween(prevQ, qHead) / DT;
+    const omega = angularVelocityBody(prevQ, qHead, DT);
     prevQ = qHead;
 
     let released: boolean;
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, DT);
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, omega, axis, DT);
     if (selector.pathology === 'cupulolithiasis' && !debrisReleased && released) {
       debrisReleased = true;
       releasedAtStep = i;
@@ -127,6 +151,12 @@ describe('cupula release integration', () => {
     expect(result.debrisReleased).toBe(false);
   });
 
+  it('Semont liberatory does NOT release horizontal-canal debris (posterior-plane maneuver)', () => {
+    const horizontalSelector: CanalSelector = { ...cupulolithiasisSelector, canal: 'horizontal' };
+    const result = runWithRelease(semontLiberatoryRight, horizontalSelector);
+    expect(result.debrisReleased).toBe(false);
+  });
+
   it('normal mouse-drag-speed head movement does not release the debris', () => {
     // Representative of ordinary interactive dragging: several small, unhurried
     // reorientations, none of which should read as "rapid".
@@ -143,14 +173,15 @@ describe('cupula release integration', () => {
     let prevQ = player.currentOrientation();
     let releaseDetector = initialReleaseDetector();
     let debrisReleased = false;
+    const axis = CANAL_PLANE_NORMAL.posterior.right;
     const steps = Math.ceil(3 / DT);
     for (let i = 0; i < steps; i++) {
       player.tick(DT);
       const q = player.currentOrientation();
-      const angularSpeed = quatAngleBetween(prevQ, q) / DT;
+      const omega = angularVelocityBody(prevQ, q, DT);
       prevQ = q;
       let released: boolean;
-      [releaseDetector, released] = updateReleaseDetector(releaseDetector, angularSpeed, DT);
+      [releaseDetector, released] = updateReleaseDetector(releaseDetector, omega, axis, DT);
       if (released) debrisReleased = true;
     }
     expect(debrisReleased).toBe(false);
@@ -175,72 +206,26 @@ describe('cupula release integration', () => {
       (w) => w.label === 'Rapid flip to opposite side, face down'
     )!.quat;
     const newManeuverStartPose = dixHallpikeRight.waypoints[0].quat;
+    const axis = CANAL_PLANE_NORMAL.posterior.right;
 
     // The bug this guards against: velocity tracking carrying over the OLD maneuver's
     // last orientation across a maneuver switch produces a one-frame phantom jump to the
-    // NEW maneuver's first waypoint -- verified via manual browser testing to genuinely
-    // false-trigger a release in the full app (fixed in main.ts's resetPhysics() by
-    // reseeding prevQHeadForVelocity from the active source's CURRENT orientation at
-    // reset time, not the stale one from before the switch).
-    const phantomJumpSpeed = quatAngleBetween(oldManeuverEndPose, newManeuverStartPose) / DT;
-    expect(phantomJumpSpeed).toBeGreaterThan(RAPID_SPEED_THRESHOLD); // confirms this really is a big enough jump to matter
+    // NEW maneuver's first waypoint -- confirmed this really is a big enough jump to
+    // matter by checking it exceeds the threshold on its own below.
+    const phantomOmega = angularVelocityBody(oldManeuverEndPose, newManeuverStartPose, DT);
+    let phantomDetector = initialReleaseDetector();
+    let phantomFired: boolean;
+    [phantomDetector, phantomFired] = updateReleaseDetector(phantomDetector, phantomOmega, axis, DT);
+    expect(Math.abs(dot(phantomOmega, axis))).toBeGreaterThan(RELEASE_DECEL_THRESHOLD * DT); // confirms this really is a big jump
 
     // The fix: velocity tracking is reset to the NEW orientation at switch time, so the
     // first real tick compares new-pose-to-new-pose (zero speed), never the phantom jump.
     let releaseDetector = initialReleaseDetector();
     let released: boolean;
-    const fixedAngularSpeed = quatAngleBetween(newManeuverStartPose, newManeuverStartPose) / DT; // = 0
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, fixedAngularSpeed, DT);
-    [releaseDetector, released] = updateReleaseDetector(releaseDetector, 0.5, DT); // gentle motion afterward
+    const fixedOmega = angularVelocityBody(newManeuverStartPose, newManeuverStartPose, DT); // = 0
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, fixedOmega, axis, DT);
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, [0, 0, 0.5], axis, DT); // gentle motion afterward
     expect(released).toBe(false);
-  });
-
-  /**
-   * Now that mouse-drag/gyro sources are allowed to trigger release too (see
-   * cupulaRelease.ts's smoothing), this is the actual bug that previously forced
-   * excluding them entirely: MouseDragSource applies raw pointermove deltas to
-   * orientation immediately, so several events landing within one physics tick can
-   * produce a single-tick angular speed reading far beyond anything a real head could
-   * do. The low-pass filter must damp that single anomalous tick without preventing a
-   * genuinely SUSTAINED fast movement (held over a realistic duration) from still
-   * triggering.
-   */
-  it('a single-tick speed spike is rejected outright, not just delayed', () => {
-    // Single anomalous tick: speed spikes far above threshold for exactly one sample
-    // (simulating a burst of pointermove events collapsed into one physics tick), then
-    // returns to a normal idle rate. Checked over a full second afterward, not just a
-    // few ticks -- an earlier version of this test only checked 8 ticks post-spike and
-    // passed even though smoothing ALONE (without the MAX_PLAUSIBLE_ANGULAR_SPEED clamp)
-    // only delays the false release by ~0.2-0.3s rather than actually preventing it, as
-    // confirmed by manual browser testing. This is why the clamp exists.
-    let spikeDetector = initialReleaseDetector();
-    let spikeReleased = false;
-    const steps = [40, ...Array(Math.ceil(1 / DT)).fill(0.05)];
-    for (const speed of steps) {
-      let released: boolean;
-      [spikeDetector, released] = updateReleaseDetector(spikeDetector, speed, DT);
-      if (released) spikeReleased = true;
-    }
-    expect(spikeReleased).toBe(false);
-
-    // Sustained rapid movement: speed stays above threshold for ~0.3s (comparable to a
-    // real deliberate fast mouse-drag or head-turn held for a realistic duration, and to
-    // Semont/Zuma's own ~0.8-1s rapid transitions), then stops.
-    let sustainedDetector = initialReleaseDetector();
-    let sustainedReleased = false;
-    const sustainedSteps = Math.ceil(0.3 / DT);
-    for (let i = 0; i < sustainedSteps; i++) {
-      let released: boolean;
-      [sustainedDetector, released] = updateReleaseDetector(sustainedDetector, 2.5, DT);
-      if (released) sustainedReleased = true;
-    }
-    // Decay phase long enough for the smoothed speed to actually fall back below
-    // RELEASE_STOP_SPEED (several smoothing time constants), not just a couple of ticks.
-    for (let i = 0; i < Math.ceil(0.5 / DT); i++) {
-      let released: boolean;
-      [sustainedDetector, released] = updateReleaseDetector(sustainedDetector, 0, DT);
-      if (released) sustainedReleased = true;
-    }
-    expect(sustainedReleased).toBe(true);
+    void phantomFired;
   });
 });

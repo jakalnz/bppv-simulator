@@ -1,51 +1,71 @@
-import { MAX_PLAUSIBLE_ANGULAR_SPEED, RAPID_SPEED_THRESHOLD, RELEASE_SPEED_SMOOTHING_TAU, RELEASE_STOP_SPEED } from './params';
+import { Vec3, dot } from './types';
+import {
+  MAX_PLAUSIBLE_ANGULAR_SPEED,
+  RELEASE_DECEL_THRESHOLD,
+  RELEASE_ACCEL_SMOOTHING_TAU,
+} from './params';
 
 /**
- * Tracks whether a rapid head movement (SMOOTHED angular speed exceeding
- * RAPID_SPEED_THRESHOLD) has occurred and subsequently stopped (dropped back below
- * RELEASE_STOP_SPEED) -- a two-threshold hysteresis crossing-detector on top of a
- * low-pass filter, not a single instantaneous check, so neither a momentary noisy
- * sample nor a single anomalous tick can false-trigger. "Armed" once smoothed speed
- * crosses above the high threshold; fires (returns true) the first time armed smoothed
- * speed then crosses below the low threshold; resets to unarmed either way.
+ * Tracks whether the SMOOTHED angular acceleration about one specific canal's own axis
+ * (see canal.ts's CANAL_PLANE_NORMAL) has crossed above RELEASE_DECEL_THRESHOLD /
+ * INTERACTIVE_RELEASE_DECEL_THRESHOLD -- edge-triggered (fires once on the rising edge,
+ * re-arms only once the signal drops back below the threshold), not a raw instantaneous
+ * check on every frame while above it.
  *
- * The smoothing (see RELEASE_SPEED_SMOOTHING_TAU) is what makes this safe to feed from
+ * Projecting onto the canal's own axis before differentiating is what makes this
+ * canal-SPECIFIC (see RELEASE_DECEL_THRESHOLD's doc comment): a rapid rotation about
+ * some other axis, that doesn't actually load this canal's plane, correctly produces a
+ * small projected value and doesn't release this canal's debris, even if the head is
+ * moving fast overall in some other direction.
+ *
+ * The smoothing (see RELEASE_ACCEL_SMOOTHING_TAU) is what makes differentiating safe at
+ * all: raw single-frame angular deceleration blows up at every scripted waypoint
+ * transition (gentle or rapid) due to this simulator's fixed-timestep velocity
+ * discontinuities, and is also what protects against a single noisy/bursty sample from
  * ANY orientation source, including mouse-drag/gyro, which apply raw input-event deltas
- * immediately with no smoothing of their own and can otherwise produce an
- * instantaneous "impossible" speed spike from a single bursty sample (confirmed
- * empirically: an unsmoothed fast synthetic drag false-triggered release before this
- * was added).
+ * immediately with no smoothing of their own.
  */
 export interface CupulaReleaseDetector {
-  armed: boolean;
-  smoothedSpeed: number;
+  /** Low-pass-filtered canal-axis-projected angular velocity (rad/s), signed. */
+  smoothedOmega: number;
+  /** Whether the smoothed |acceleration| is currently above threshold (for edge detection). */
+  above: boolean;
 }
 
 export function initialReleaseDetector(): CupulaReleaseDetector {
-  return { armed: false, smoothedSpeed: 0 };
+  return { smoothedOmega: 0, above: false };
 }
 
-/** Returns [nextState, fired] -- fired is true exactly once, the frame the release trigger condition is met. */
+/**
+ * Returns [nextState, fired] -- fired is true exactly once, the frame the release
+ * trigger condition is met.
+ *
+ * @param omegaBody head angular velocity (rad/s), HEAD-frame vector (see
+ *   types.ts's angularVelocityBody).
+ * @param canalAxis the specific canal's plane-normal axis (HeadFrame) to project onto --
+ *   e.g. CANAL_PLANE_NORMAL[selector.canal][selector.side].
+ */
 export function updateReleaseDetector(
   state: CupulaReleaseDetector,
-  angularSpeed: number,
+  omegaBody: Vec3,
+  canalAxis: Vec3,
   dt: number,
-  // Overridable arm threshold -- main.ts passes INTERACTIVE_RAPID_SPEED_THRESHOLD instead
-  // of the default RAPID_SPEED_THRESHOLD for mouse-drag/gyro sources, since those apply
+  // Overridable threshold -- main.ts passes INTERACTIVE_RELEASE_DECEL_THRESHOLD instead
+  // of the default RELEASE_DECEL_THRESHOLD for mouse-drag/gyro sources, since those apply
   // raw un-paced input deltas where the scripted-maneuver-calibrated default triggers on
-  // ordinary brisk movement -- see INTERACTIVE_RAPID_SPEED_THRESHOLD's own doc comment.
-  rapidSpeedThreshold: number = RAPID_SPEED_THRESHOLD
+  // ordinary brisk movement -- see INTERACTIVE_RELEASE_DECEL_THRESHOLD's own doc comment.
+  decelThreshold: number = RELEASE_DECEL_THRESHOLD
 ): [CupulaReleaseDetector, boolean] {
+  const projected = dot(omegaBody, canalAxis);
   // Clamp BEFORE smoothing -- see MAX_PLAUSIBLE_ANGULAR_SPEED's comment for why smoothing
   // alone isn't sufficient to reject a single-tick input-event-batching artifact.
-  const clampedSpeed = Math.min(angularSpeed, MAX_PLAUSIBLE_ANGULAR_SPEED);
-  const smoothedSpeed =
-    state.smoothedSpeed + (clampedSpeed - state.smoothedSpeed) * Math.min(1, dt / RELEASE_SPEED_SMOOTHING_TAU);
+  const clampedProjected = Math.max(-MAX_PLAUSIBLE_ANGULAR_SPEED, Math.min(MAX_PLAUSIBLE_ANGULAR_SPEED, projected));
+  const smoothedOmega =
+    state.smoothedOmega + (clampedProjected - state.smoothedOmega) * Math.min(1, dt / RELEASE_ACCEL_SMOOTHING_TAU);
 
-  if (!state.armed) {
-    if (smoothedSpeed > rapidSpeedThreshold) return [{ armed: true, smoothedSpeed }, false];
-    return [{ ...state, smoothedSpeed }, false];
-  }
-  if (smoothedSpeed < RELEASE_STOP_SPEED) return [{ armed: false, smoothedSpeed }, true];
-  return [{ ...state, smoothedSpeed }, false];
+  const decel = (smoothedOmega - state.smoothedOmega) / dt;
+  const above = Math.abs(decel) > decelThreshold;
+  const fired = above && !state.above;
+
+  return [{ smoothedOmega, above }, fired];
 }

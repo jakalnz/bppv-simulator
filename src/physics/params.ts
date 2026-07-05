@@ -185,80 +185,81 @@ export const QUICK_PHASE_RESET_AMOUNT = 0.3;
 export const CUPULA_GRAVITY_GAIN = 0.08;
 
 /**
- * Angular speed (rad/s) a head movement must exceed to count as "rapid" -- the
- * mechanical trigger that knocks cupula-adherent debris loose, converting
- * cupulolithiasis into free-floating canalithiasis (see cupulaRelease.ts). Semont's and
- * Zuma's designated rapid transitions are deliberately built to exceed this (see
- * maneuvers/semont.ts, maneuvers/zuma.ts); Dix-Hallpike/Epley/roll-test/BBQ-roll's
- * transitions are deliberately built to stay below it (their provocation mechanism is
- * sustained gravity on already-free debris, not a mechanical release).
+ * Angular acceleration (rad/s^2), about the SPECIFIC canal's own plane-normal axis (see
+ * canal.ts's CANAL_PLANE_NORMAL), that a head movement must exceed to mechanically knock
+ * that canal's cupula-adherent debris loose, converting cupulolithiasis into
+ * free-floating canalithiasis (see cupulaRelease.ts). This is magnitude of angular
+ * acceleration, not signed "deceleration only" -- physically, the inertial force that
+ * can dislodge debris scales with |d(omega)/dt| regardless of whether the head is
+ * speeding up or slamming to a stop, so both the rapid onset and the abrupt stop of a
+ * maneuver's fast transition can trigger it.
  *
- * Picked from a real numeric gap, not guessed: peak angular speed reached by every
- * existing maneuver's transitions (measured via quatAngleBetween finite differences at
- * FIXED_DT) clusters at <= ~1.06 rad/s for the gentle maneuvers and >= ~1.58 rad/s for
- * the rapid ones -- see the discriminating acceptance test in
- * physics/cupulaRelease.test.ts, which is the actual arbiter if these maneuvers'
- * waypoint timings ever change.
+ * Projecting onto the canal's own axis (rather than raw omnidirectional angular speed,
+ * the previous approach) is what makes this canal-SPECIFIC: a rapid rotation that
+ * doesn't load a given canal's plane shouldn't release that canal's debris, even if the
+ * head is moving fast overall. Confirmed against every existing maneuver (see
+ * physics/cupulaRelease.test.ts, the actual arbiter if maneuver waypoint timings
+ * change): projected onto the POSTERIOR canal's axis, gentle maneuvers peak <= ~11.3
+ * rad/s^2 and Semont/Zuma peak >= ~15.1; projected onto the HORIZONTAL canal's axis,
+ * gentle maneuvers (and Semont, which is a posterior-plane maneuver) peak <= ~9.4 and
+ * only Zuma (a horizontal-canal maneuver) exceeds it at ~18.8. A single threshold in the
+ * gap between those clusters (~13) discriminates both canals correctly, producing a
+ * clinically sensible per-(maneuver, canal) release pattern: Semont detaches posterior
+ * debris only, Zuma detaches both, gentle repositioning maneuvers detach neither.
+ *
+ * The signal fed into this threshold is smoothed first (see RELEASE_ACCEL_SMOOTHING_TAU)
+ * -- an earlier attempt using RAW single-frame angular deceleration (no smoothing)
+ * failed to discriminate at all: at this simulator's fixed timestep, EVERY scripted
+ * waypoint transition (rapid or gentle) ends in a one-frame velocity discontinuity, so
+ * gentle maneuvers produced deceleration spikes just as large as genuinely rapid ones.
+ * Low-pass filtering the projected angular velocity BEFORE differentiating tames that
+ * artifact (a discontinuity smoothed over RELEASE_ACCEL_SMOOTHING_TAU produces a much
+ * smaller derivative peak than the same discontinuity taken raw over one frame), which
+ * is what makes a clean threshold on the smoothed derivative possible at all.
  */
-export const RAPID_SPEED_THRESHOLD = 1.3;
+export const RELEASE_DECEL_THRESHOLD = 13;
 
 /**
- * Separate (much higher) rapid-speed threshold used ONLY for interactive orientation
- * sources (mouse-drag/gyro, see main.ts's stepPhysicsOnce) -- RAPID_SPEED_THRESHOLD
- * itself stays untouched since it's precisely calibrated against every scripted
- * maneuver's own measured peaks (see that constant's comment/cupulaRelease.test.ts) and
- * changing it would break that discrimination. Interactive input is a different
- * situation: mouse-drag applies raw un-throttled pointermove deltas (and gyro raw
- * device-sensor deltas) directly, with no scripted waypoint pacing behind it, so an
- * ordinary brisk-but-unintentional head-turn while just exploring the model easily
- * exceeded 1.3 rad/s (~75 deg/s) and silently converted cupulolithiasis into
- * canalithiasis -- confirmed as the reported "way too easy to accidentally detach the
- * cupula" behavior. Raised well above that (~230 deg/s) so only a deliberate, fast
- * flick/shake -- comparable to Semont-liberatory's own verified rapid transition speed,
- * see RAPID_SPEED_THRESHOLD's comment -- still triggers release; casual interactive
- * movement no longer does.
+ * Separate (much higher) threshold used ONLY for interactive orientation sources
+ * (mouse-drag/gyro, see main.ts's stepPhysicsOnce) -- RELEASE_DECEL_THRESHOLD itself
+ * stays untouched since it's precisely calibrated against every scripted maneuver's own
+ * measured peaks (see that constant's comment/cupulaRelease.test.ts) and changing it
+ * would break that discrimination. Interactive input is a different situation:
+ * mouse-drag applies raw un-throttled pointermove deltas (and gyro raw device-sensor
+ * deltas) directly, with no scripted waypoint pacing behind it, so an ordinary
+ * brisk-but-unintentional head-turn could otherwise silently convert cupulolithiasis
+ * into canalithiasis, matching the same "way too easy to accidentally detach the
+ * cupula" failure mode the old speed-based INTERACTIVE_RAPID_SPEED_THRESHOLD was raised
+ * to prevent (scaled by the same ratio, ~3x, since no separate interactive-specific
+ * acceleration data exists yet).
  */
-export const INTERACTIVE_RAPID_SPEED_THRESHOLD = 4;
+export const INTERACTIVE_RELEASE_DECEL_THRESHOLD = 40;
 
 /**
- * Once angular speed has exceeded RAPID_SPEED_THRESHOLD, release triggers when it drops
- * back below this (rad/s) -- i.e. the head has now stopped/decelerated after the rapid
- * movement. This is deliberately NOT a raw instantaneous-deceleration threshold: at this
- * simulator's fixed timestep, EVERY scripted waypoint transition (rapid or gentle) ends
- * in a one-frame velocity discontinuity down to the next waypoint's speed, so a naive
- * "deceleration exceeds X" check would fire on gentle transitions just as often as rapid
- * ones (confirmed empirically -- see cupulaRelease.test.ts's comments). Gating on
- * "was moving fast, has now nearly stopped" avoids that false-positive entirely and
- * still captures the real clinical mechanism (rapid motion followed by an abrupt stop).
+ * Low-pass filter time constant (seconds) applied to the canal-axis-projected angular
+ * velocity before it's differentiated and compared against RELEASE_DECEL_THRESHOLD /
+ * INTERACTIVE_RELEASE_DECEL_THRESHOLD (see cupulaRelease.ts). Needed for two reasons:
+ * (1) it's what tames the one-frame waypoint-transition discontinuity into a bounded
+ * derivative (see RELEASE_DECEL_THRESHOLD's comment) rather than a spike that fires on
+ * every transition regardless of speed; (2) mouse-drag/gyro orientation sources apply
+ * raw input-event deltas immediately with no smoothing of their own, so a single
+ * noisy/bursty sample (multiple pointermove events landing within one physics tick, or a
+ * jittery gyro reading) can otherwise read as an instantaneous "impossible" spike.
  */
-export const RELEASE_STOP_SPEED = 0.3;
+export const RELEASE_ACCEL_SMOOTHING_TAU = 0.1;
 
 /**
- * Low-pass filter time constant (seconds) applied to angular speed before it's compared
- * against RAPID_SPEED_THRESHOLD/RELEASE_STOP_SPEED (see cupulaRelease.ts). Needed
- * because mouse-drag/gyro orientation sources apply raw input-event deltas immediately
- * with no smoothing of their own, so a single noisy/bursty sample (multiple pointermove
- * events landing within one physics tick, or a jittery gyro reading) can otherwise read
- * as an instantaneous "impossible" speed spike -- confirmed empirically: an unsmoothed
- * fast synthetic drag false-triggered release. Smoothing damps a single anomalous tick
- * while still letting a SUSTAINED rapid movement (a real maneuver's ~0.8-1s rapid
- * transition, or a deliberate fast head-turn via mouse/gyro held for a comparable
- * duration) rise past the threshold -- verified numerically in cupulaRelease.test.ts.
- */
-export const RELEASE_SPEED_SMOOTHING_TAU = 0.1;
-
-/**
- * Hard ceiling (rad/s) applied to a raw angular-speed sample BEFORE smoothing (see
- * RELEASE_SPEED_SMOOTHING_TAU). Smoothing alone isn't enough: a single extreme spike
- * (many pointermove events landing within one physics tick) still leaves the smoothed
- * value elevated for several time constants afterward, eventually decaying past
- * RELEASE_STOP_SPEED and firing anyway -- just delayed, not actually rejected (confirmed
- * empirically). Clamping the raw sample first means even a massively-batched single-tick
- * artifact can only push the smoothed value up by a bounded, small amount, so it alone
- * can never arm the detector -- only a SUSTAINED run of samples near or above this
- * ceiling (a real fast movement held over multiple ticks) can. Set well above Semont-
- * liberatory's verified peak (~3.14 rad/s, see cupulaRelease.test.ts) so genuine rapid
- * maneuvers/movements are unaffected, but far below what a batch of input events can
- * produce in one tick (tens of rad/s).
+ * Hard ceiling (rad/s) applied to the raw canal-axis-projected angular velocity sample
+ * BEFORE smoothing (see RELEASE_ACCEL_SMOOTHING_TAU). Smoothing alone isn't enough: a
+ * single extreme spike (many pointermove events landing within one physics tick) still
+ * leaves the smoothed value -- and therefore its derivative on the next tick -- elevated
+ * well past RELEASE_DECEL_THRESHOLD, just delayed by one tick rather than actually
+ * rejected. Clamping the raw sample first means even a massively-batched single-tick
+ * artifact can only push the smoothed value (and its derivative) up by a bounded, small
+ * amount, so it alone can never cross the threshold -- only a SUSTAINED run of samples
+ * near or above this ceiling (a real fast movement held over multiple ticks) can. Set
+ * well above Semont-liberatory's verified peak angular speed (~3.14 rad/s, see
+ * cupulaRelease.test.ts) so genuine rapid maneuvers/movements are unaffected, but far
+ * below what a batch of input events can produce in one tick (tens of rad/s).
  */
 export const MAX_PLAUSIBLE_ANGULAR_SPEED = 6;
