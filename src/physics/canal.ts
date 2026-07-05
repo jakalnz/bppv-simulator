@@ -157,11 +157,40 @@ export const S_COMMON_CRUS = 3.5;
  * dataset, same source/frame as canalScene.ts's real-anatomy overlay). Used below to
  * anchor the horizontal canal's e1 to the REAL ampulla direction instead of forcing it
  * to align with gravity (see canalBasis's doc comment for why the horizontal canal
- * specifically needs this, unlike the posterior canal).
+ * specifically needs this).
  */
 const HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M: Vec3 = applyAnatomyTiltCorrection(
   v3(0.0012251330141264366, -0.0038101372329302557, 0.0008969132424125543)
 );
+
+/**
+ * TRIED AND REVERTED, feature-branch only: anchoring the posterior canal's e1 to its own
+ * real ampulla position (scene/earAnatomy.json's posterior.ampullaAnchor, IEMap dataset)
+ * the same way the horizontal canal's e1 is anchored above. Numerically this put the
+ * posterior canal's resting arc position at ~320 degrees (nearly swept to the common
+ * crus) -- clinically implausible, since free posterior-canal debris is well established
+ * to rest near the ampulla when upright.
+ *
+ * Root cause: CANAL_PLANE_NORMAL.posterior comes from Wu et al. 2021 (a literature
+ * measurement), while this IEMap ampulla anchor comes from a DIFFERENT, independent
+ * cadaver specimen. Checked directly: the angle between Wu et al.'s posterior normal and
+ * IEMap's own posterior normal is ~79.6 degrees -- nowhere close to describing the same
+ * plane. As a sanity check, combining IEMap's OWN normal with IEMap's OWN anchor (both
+ * from the same specimen, unlike the cross-source combination attempted here) gives a
+ * resting point around ~45.6 degrees -- plausibly near the ampulla -- confirming the
+ * anchor-based approach isn't wrong in principle, only invalid to mix with a normal from
+ * a different source.
+ *
+ * A proper fix would mean switching the posterior canal's physics normal to IEMap's own
+ * value and re-verifying every cross-check currently backing Wu et al.'s normal (the
+ * RALP/LARP coplanarity check, the Della Santina cross-reconstruction, the handedness/
+ * sign tests) against the new one -- a bigger undertaking than this experiment, so the
+ * posterior canal is left on the gravity-anchored e1 below (see e1Direction), which
+ * sidesteps the mismatch entirely by never needing an external anchor for this canal.
+ */
+const AMPULLA_ANCHOR_RIGHT_M: Partial<Record<CanalType, Vec3>> = {
+  horizontal: HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M,
+};
 
 interface CanalBasis {
   e1: Vec3;
@@ -181,7 +210,11 @@ const cachedBases: Partial<Record<CanalType, Partial<Record<EarSide, CanalBasis>
  * upright head posture. That makes s=0 (the ampulla) the physically stable resting
  * equilibrium for an upright head -- matching the clinical picture that free posterior-
  * canal debris normally settle in the ampullary arm when upright, and that a provoking
- * maneuver then drives them ampullofugally away from that rest point.
+ * maneuver then drives them ampullofugally away from that rest point. An anchor-based
+ * treatment (like the horizontal canal's below) was tried on a feature branch and
+ * reverted -- see AMPULLA_ANCHOR_RIGHT_M's doc comment for why: the only real ampulla
+ * landmark available comes from a different anatomical dataset than this canal's
+ * literature plane normal, and the two turned out not to describe the same plane.
  *
  * HORIZONTAL canal: this same gravity-forced construction does NOT hold. Gravity's
  * in-plane projection is, by definition, always the point on the idealized circle
@@ -243,13 +276,17 @@ export function eyeRotationSenseSign(canal: CanalType, side: EarSide): 1 | -1 {
 }
 
 function e1Direction(canal: CanalType, side: EarSide, n: Vec3): Vec3 {
-  if (canal === 'horizontal') {
-    // Real ampulla direction (see HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M's doc comment),
-    // mirrored for the left ear the same way CANAL_PLANE_NORMAL mirrors its normal.
-    const anchor = side === 'left' ? mirrorAcrossSagittal(HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M) : HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M;
+  const anchorRight = AMPULLA_ANCHOR_RIGHT_M[canal];
+  if (anchorRight) {
+    // Real ampulla direction (see AMPULLA_ANCHOR_RIGHT_M's doc comments), mirrored for
+    // the left ear the same way CANAL_PLANE_NORMAL mirrors its normal.
+    const anchor = side === 'left' ? mirrorAcrossSagittal(anchorRight) : anchorRight;
     const inPlaneComponent = add(anchor, scale(n, -dot(anchor, n)));
     return normalize(inPlaneComponent);
   }
+  // Posterior canal: no real-anchor entry above (see AMPULLA_ANCHOR_RIGHT_M's doc
+  // comment for why) -- e1 is instead forced to gravity's own in-plane projection in the
+  // upright posture, making s=0 the resting equilibrium by construction.
   const gravityUprightHead = v3(0, 0, -1); // HeadFrame inferior direction: gravity when q_head is identity (upright)
   const inPlaneComponent = add(gravityUprightHead, scale(n, -dot(gravityUprightHead, n)));
   return normalize(inPlaneComponent);
@@ -270,16 +307,16 @@ function canalBasis(canal: CanalType, side: EarSide): CanalBasis {
 
 /**
  * Arc position (radians) where free-floating canalithiasis debris actually rests with
- * the head upright, for the given canal/side -- see BASE_HANDEDNESS_USES_E1_CROSS_N's
- * doc comment for why this isn't simply 0 for the horizontal canal. Computed as the
- * angle (within the canal's own (e1, e2) plane basis) between e1 (the real ampulla
- * direction for horizontal, or gravity itself for posterior, where the two already
- * coincide by construction) and gravity's in-plane projection when upright -- i.e.
- * genuinely derived from real anatomy + gravity, not a hand-picked guess. Evaluates to
- * exactly 0 for the posterior canal (e1 IS gravity there), and empirically comes out
- * ~1.84 rad (~106 degrees) for the horizontal canal, for both ears (checked
- * numerically) -- comfortably short of pi, so this is still the genuine lowest point of
- * the idealized circle for this canal's rotated e1, not an "uphill" contradiction.
+ * the head upright, for the given canal/side -- see AMPULLA_ANCHOR_RIGHT_M's doc comment
+ * for why this is still exactly 0 for the posterior canal (its e1 IS gravity's own
+ * projection by construction, unlike the horizontal canal's real-anchor-derived e1).
+ * Computed as the angle (within the canal's own (e1, e2) plane basis) between e1 and
+ * gravity's in-plane projection when upright -- i.e. genuinely derived from real anatomy
+ * + gravity for the horizontal canal, not a hand-picked guess. Evaluates to exactly 0
+ * for the posterior canal, and empirically comes out ~1.89 rad (~108 degrees) for the
+ * horizontal canal, for both ears (checked numerically) -- comfortably short of pi, so
+ * this is still the genuine lowest point of the idealized circle for this canal's
+ * rotated e1, not an "uphill" contradiction.
  *
  * Cupulolithiasis is unaffected: debris there is adherent directly to the cupula at the
  * fixed anatomical attachment point (s=0 in every canal), not free to migrate toward
