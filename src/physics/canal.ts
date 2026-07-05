@@ -32,6 +32,40 @@ function mirrorAcrossSagittal(n: Vec3): Vec3 {
 }
 
 /**
+ * EXPERIMENTAL correction, feature-branch only: rotates a HeadFrame vector about the
+ * interaural axis (HeadFrame Y, left-right, unaffected by this rotation) by
+ * ANATOMY_TILT_CORRECTION_DEG. Tests the hypothesis that the ~16-degree horizontal-canal
+ * tilt this app derives from Wu et al.'s literature normal (see LEFT_PLANE_NORMAL's doc
+ * comment) undershoots the commonly-quoted clinical ~30 degrees because the WHOLE
+ * anatomical reference frame (both canals' normals, plus the horizontal canal's real
+ * ampulla anchor) is tilted ~14 degrees off this app's own definition of upright, not
+ * because of an error specific to the horizontal canal alone -- i.e. a single rigid
+ * correction to every anatomy-derived vector should fix the horizontal number AND keep
+ * the posterior/horizontal coplanarity and RALP/LARP cross-checks intact, since those
+ * only depend on the vectors' relationships to EACH OTHER, not their absolute tilt.
+ *
+ * Rotating about Y (rather than X or the canal's own axis) is what makes this a single
+ * global "the whole ear was tilted" correction instead of a per-canal fudge: pitching
+ * the head about the interaural axis is exactly the "nose-down" motion the clinical
+ * "~30 degrees to bring the horizontal canal into true horizontal" teaching point
+ * describes.
+ *
+ * +14 degrees moves the horizontal canal's derived tilt from ~16.2 to ~30.2 degrees (see
+ * canal.test.ts's tilt-angle assertion) -- solved for by matching the desired 30-degree
+ * target, then rounded to the clean number this experiment was framed around; not an
+ * independently-sourced anatomical correction angle.
+ */
+const ANATOMY_TILT_CORRECTION_DEG = 14;
+
+function applyAnatomyTiltCorrection(v: Vec3): Vec3 {
+  const rad = (ANATOMY_TILT_CORRECTION_DEG * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const [x, y, z] = v;
+  return v3(x * cos - z * sin, y, x * sin + z * cos);
+}
+
+/**
  * Semicircular canal plane normals, expressed in HeadFrame (+X anterior, +Y left,
  * +Z superior). Both stored as the LEFT ear's literature value, mirrored across the
  * sagittal plane (flip HeadFrame.Y) to get the right ear.
@@ -72,8 +106,8 @@ function mirrorAcrossSagittal(n: Vec3): Vec3 {
  * from the un-mirrored side -- each (canal, side) combination is checked independently.
  */
 const LEFT_PLANE_NORMAL: Record<CanalType, Vec3> = {
-  posterior: normalize(v3(0.702, 0.66, 0.266)),
-  horizontal: normalize(v3(-0.279, 0.025, 0.96)),
+  posterior: normalize(applyAnatomyTiltCorrection(v3(0.702, 0.66, 0.266))),
+  horizontal: normalize(applyAnatomyTiltCorrection(v3(-0.279, 0.025, 0.96))),
 };
 
 export const CANAL_PLANE_NORMAL: Record<CanalType, Record<EarSide, Vec3>> = {
@@ -125,7 +159,9 @@ export const S_COMMON_CRUS = 3.5;
  * to align with gravity (see canalBasis's doc comment for why the horizontal canal
  * specifically needs this, unlike the posterior canal).
  */
-const HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M: Vec3 = v3(0.0012251330141264366, -0.0038101372329302557, 0.0008969132424125543);
+const HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M: Vec3 = applyAnatomyTiltCorrection(
+  v3(0.0012251330141264366, -0.0038101372329302557, 0.0008969132424125543)
+);
 
 interface CanalBasis {
   e1: Vec3;
