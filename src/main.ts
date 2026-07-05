@@ -346,6 +346,12 @@ let secondsSinceSettled = 0;
 // of the session. Applies regardless of orientation source (scripted maneuver, mouse-drag,
 // or gyro) and regardless of which canal-view style is displayed.
 let prevQHeadForVelocity: Quat = lastQHead;
+// Wall-clock timestamp (performance.now(), ms) of the last orientation sample used for
+// prevQHeadForVelocity, when the active source provides one (currently only
+// DeviceOrientationSource) -- see OrientationSource.sampleTimestampMs's doc comment for
+// why gyro needs the TRUE elapsed time between samples rather than the fixed physics
+// timestep.
+let prevSampleTimestampMs: number | null = null;
 let releaseDetector: CupulaReleaseDetector = initialReleaseDetector();
 let cupulaDebrisReleased = false;
 
@@ -362,6 +368,11 @@ function resetPhysics(): void {
   // using the old orientation here would create a one-frame "phantom" jump large enough
   // to false-trigger a cupula release the instant the new maneuver starts.
   prevQHeadForVelocity = activeOrientationSource().currentOrientation() ?? maneuverPlayer.currentOrientation();
+  // Same reasoning applies to the timestamp: an old gyro sample's timestamp surviving
+  // across a reset/mode-switch would make the next real sample's elapsed-time
+  // computation see a huge, bogus gap. Re-seeded fresh from whatever the active source
+  // reports right now (null for anything that isn't gyro, or gyro with no sample yet).
+  prevSampleTimestampMs = activeOrientationSource().sampleTimestampMs?.() ?? null;
   releaseDetector = initialReleaseDetector();
   cupulaDebrisReleased = false;
   vngTrace.reset();
@@ -390,7 +401,27 @@ function stepPhysicsOnce(dt: number): void {
   // (not a raw instantaneous check), which is what makes it safe to evaluate regardless
   // of orientation source (scripted maneuver, mouse-drag, or gyro), and canal-SPECIFIC
   // rather than triggering on any fast rotation regardless of axis.
-  const omegaBody = angularVelocityBody(prevQHeadForVelocity, qHead, dt);
+  //
+  // The DENOMINATOR for that velocity needs care: scripted maneuver playback and
+  // mouse-drag both recompute/apply orientation every physics tick, so the fixed
+  // timestep IS the true elapsed time between samples for them. Device gyro does NOT --
+  // browsers commonly deliver deviceorientation well below the 120Hz physics rate, so
+  // qHead can stay unchanged for several ticks and then jump once a new sample arrives.
+  // Dividing that jump by the fixed timestep (as if it happened in just one tick) would
+  // inflate the computed velocity by however many ticks were actually skipped -- which
+  // then gets silently discarded by MAX_PLAUSIBLE_ANGULAR_SPEED's clamp regardless of
+  // how fast the real motion was, defeating release detection for a genuinely rapid
+  // gyro-driven flick (reported: Zuma via phone gyro couldn't trigger release at all).
+  // Using the REAL elapsed wall-clock time between distinct gyro samples instead fixes
+  // this at the source rather than papering over it with a looser threshold.
+  const sampleTimestampMs = source.sampleTimestampMs?.() ?? null;
+  let velocityDt = dt;
+  if (sampleTimestampMs !== null && prevSampleTimestampMs !== null) {
+    const elapsedSeconds = (sampleTimestampMs - prevSampleTimestampMs) / 1000;
+    if (elapsedSeconds > 0) velocityDt = elapsedSeconds;
+  }
+  if (sampleTimestampMs !== null) prevSampleTimestampMs = sampleTimestampMs;
+  const omegaBody = angularVelocityBody(prevQHeadForVelocity, qHead, velocityDt);
   prevQHeadForVelocity = qHead;
   let released: boolean;
   // Interactive sources (mouse-drag/gyro) use the same threshold as scripted maneuvers
