@@ -353,7 +353,7 @@
 
   <div class="abstract">
     <span class="label">Abstract</span>
-    <p>This simulator renders posterior- and horizontal-canal benign paroxysmal positional vertigo (BPPV) — both canalithiasis and cupulolithiasis variants — as an interactive 3D scene driven by a small chain of coupled physical models: canal geometry, an overdamped clot-transport model, a first-order cupula relaxation, and a vestibulo-ocular reflex (VOR) that produces torsional/vertical/horizontal nystagmus. Nearly every constant in the codebase carries an inline citation or a documented rationale, which this paper collects and organizes. The intent is diagnostic teaching, not clinical measurement: waypoint angles, hold durations, and settling speeds are compressed or approximated for legibility, and each such choice is flagged where it appears in the source. Several genuine open questions remain — a ~16&deg; vs ~30&deg; discrepancy in horizontal-canal tilt, an unverified geotropic/apogeotropic sign convention, and a short-arm re-entry pathway that is implemented but currently disabled pending tuning.</p>
+    <p>This simulator renders posterior- and horizontal-canal benign paroxysmal positional vertigo (BPPV) — both canalithiasis and cupulolithiasis variants — as an interactive 3D scene driven by a small chain of coupled physical models: canal geometry, an overdamped clot-transport model, a first-order cupula relaxation, and a vestibulo-ocular reflex (VOR) that produces torsional/vertical/horizontal nystagmus. Nearly every constant in the codebase carries an inline citation or a documented rationale, which this paper collects and organizes. The intent is diagnostic teaching, not clinical measurement: waypoint angles, hold durations, and settling speeds are compressed or approximated for legibility, and each such choice is flagged where it appears in the source. Since the previous edition, two open questions were resolved rather than just documented: the ~16&deg; vs ~30&deg; horizontal-canal tilt discrepancy was traced to a real, citable anatomical mismatch (the literature canal data's Frankfort/Reid-plane reference versus this app's gravity-referenced "upright") and corrected, and a gyro-specific timing bug that silently prevented cupula release on phones was found and fixed. A parallel investigation into extending that same real-anchor treatment to the posterior canal was tried, found to make things worse, and is recorded in full — including the real-anatomy evidence that settles why the posterior and horizontal canals are correctly treated asymmetrically, not inconsistently. Remaining open questions: an unverified geotropic/apogeotropic sign convention, and a short-arm re-entry pathway that is implemented but currently disabled pending tuning.</p>
   </div>
 
   <nav class="toc" aria-label="Table of contents">
@@ -398,11 +398,14 @@
     <p class="section-intro">Six coupled mechanisms carry the simulation from head orientation to eye movement. Each is a small, deliberately simplified model rather than a full fluid-dynamics simulation — chosen so its qualitative behavior (latency, fatigue, direction) matches the clinical picture.</p>
 
     <h3>Canal geometry <span class="tag">canal.ts</span></h3>
-    <p>Each (canal, side) pair gets a cached orthonormal in-plane basis <code>(e1, e2)</code> built from a literature plane normal. A point on the duct is <code>R&middot;cos(s)&middot;e1 + R&middot;sin(s)&middot;e2</code>, with <code>s = 0</code> at the ampulla and increasing <code>s</code> ampullofugal. For the posterior canal, <code>e1</code> is anchored to gravity's in-plane projection when upright &mdash; making the ampulla the natural resting point. The horizontal canal cannot use that same trick (it would tautologically force the ampulla to be the low point regardless of real anatomy), so its <code>e1</code> is instead anchored to the real ampulla direction taken from cadaveric centerline data, and gravity's true resting arc position (~106&deg; from the ampulla) falls out as a computed quantity.</p>
+    <p>Each (canal, side) pair gets a cached orthonormal in-plane basis <code>(e1, e2)</code> built from a literature plane normal. A point on the duct is <code>R&middot;cos(s)&middot;e1 + R&middot;sin(s)&middot;e2</code>, with <code>s = 0</code> at the ampulla and increasing <code>s</code> ampullofugal. For the posterior canal, <code>e1</code> is anchored to gravity's in-plane projection when upright &mdash; making the ampulla the natural resting point. The horizontal canal cannot use that same trick (it would tautologically force the ampulla to be the low point regardless of real anatomy), so its <code>e1</code> is instead anchored to the real ampulla direction taken from cadaveric centerline data, and gravity's true resting arc position (~108&deg; from the ampulla) falls out as a computed quantity.</p>
+    <p>This posterior/horizontal asymmetry &mdash; one canal gravity-anchored, the other real-anchored &mdash; was directly investigated rather than assumed consistent. An attempt to give the posterior canal the same real-anchor treatment produced an anatomically implausible resting point (~310&ndash;320&deg;, within a few degrees of the duct's modeled far wall). Checking the real posterior centerline data directly settled why: its HeadFrame-superior coordinates increase monotonically away from the ampulla, meaning gravity's true resting point for the real duct genuinely is at the ampulla &mdash; the exact opposite of the horizontal canal, whose own centerline decreases monotonically away from its ampulla. The asymmetry in the model is a correct reflection of the two canals' real geometry, not an inconsistency.</p>
+    <p>A separate, whole-ear rotation (<code>ANATOMY_TILT_CORRECTION_DEG</code>) is applied to every literature-derived vector before use, correcting for a distinct, real error: the literature canal data is referenced to a plane parallel to Frankfort/Reid's anatomical plane, while this app maps "upright" directly onto true gravitational vertical with no correction. Cephalometric literature establishes that the Frankfort plane is essentially never parallel to true horizontal in natural head position, averaging ~13&deg; off for standing subjects &mdash; a different, independently-measured quantity from the canal's own tilt relative to Frankfort's plane (already present in the literature data). Applying this correction brings the horizontal canal's derived tilt from ~16&deg; to ~29&deg;, matching the commonly quoted clinical ~30&deg; figure much more closely, for a citable reason rather than by fitting to the target.</p>
     <div class="const-grid">
       <div class="const"><span class="name">CANAL_RADIUS_M</span><span class="val">0.0032 m</span><span class="note">duct radius, literature approx.</span></div>
       <div class="const"><span class="name">S_MAX</span><span class="val">2&pi;&times;0.9</span><span class="note">radians of duct modeled</span></div>
       <div class="const"><span class="name">S_COMMON_CRUS</span><span class="val">3.5 rad</span><span class="note">"cleared the duct" threshold</span></div>
+      <div class="const"><span class="name">ANATOMY_TILT_CORRECTION_DEG</span><span class="val">13&deg;</span><span class="note">Frankfort-vs-natural-head-position correction</span></div>
     </div>
 
     <h3>Canalithiasis clot transport <span class="tag">canalith.ts</span></h3>
@@ -427,12 +430,13 @@
     </div>
 
     <h3>Canal-specific mechanical release <span class="tag">cupulaRelease.ts</span></h3>
-    <p>A rapid head movement can mechanically knock cupula-adherent debris loose, converting cupulolithiasis into free-floating canalithiasis mid-maneuver. Release is triggered when the smoothed angular acceleration <em>about that specific canal's own plane-normal axis</em> exceeds a threshold &mdash; projecting onto the canal's own axis (rather than raw omnidirectional angular speed) is what makes a posterior-plane maneuver like Semont release posterior debris without also releasing horizontal debris.</p>
+    <p>A rapid head movement can mechanically knock cupula-adherent debris loose, converting cupulolithiasis into free-floating canalithiasis mid-maneuver. Release is triggered when the smoothed angular acceleration <em>about that specific canal's own plane-normal axis</em> exceeds a threshold &mdash; projecting onto the canal's own axis (rather than raw omnidirectional angular speed) is what makes a posterior-plane maneuver like Semont release posterior debris without also releasing horizontal debris. The interactive (mouse/gyro) threshold was originally set ~3&times; higher than the scripted-maneuver one, carried over from a predecessor omnidirectional-speed design; once release became canal-axis-projected that margin was no longer doing useful work (confirmed empirically: a deliberate fast interactive flick still couldn't reach it), so it was lowered to match the scripted threshold exactly.</p>
     <div class="const-grid">
       <div class="const"><span class="name">RELEASE_DECEL_THRESHOLD</span><span class="val">13 rad/s&sup2;</span><span class="note">scripted maneuvers</span></div>
-      <div class="const"><span class="name">INTERACTIVE_RELEASE_DECEL_THRESHOLD</span><span class="val">40 rad/s&sup2;</span><span class="note">mouse/gyro, ~3&times; higher</span></div>
+      <div class="const"><span class="name">INTERACTIVE_RELEASE_DECEL_THRESHOLD</span><span class="val">13 rad/s&sup2;</span><span class="note">mouse/gyro, now equal</span></div>
       <div class="const"><span class="name">RELEASE_ACCEL_SMOOTHING_TAU</span><span class="val">0.1 s</span><span class="note">low-pass before differentiating</span></div>
     </div>
+    <p>A separate bug affected gyro specifically: the physics loop runs at a fixed 120Hz regardless of orientation source, but phone <code>deviceorientation</code> events arrive well below that rate. A real, fast rotation spanning several skipped physics ticks was being divided by the tiny fixed tick duration (as if it happened in just one tick), inflating the raw velocity past the safety clamp meant to reject single-tick input-batching artifacts &mdash; silently discarding the real speed signal and making release unreachable via gyro (reported: Zuma via phone gyro couldn't trigger it at all). Fixed by having the gyro source report each sample's real wall-clock timestamp, so the velocity calculation uses true elapsed time between samples instead of assuming the fixed tick.</p>
 
     <h3>Short-arm re-entry <span class="tag">shortArmReentry.ts &middot; disabled</span></h3>
     <p>A distinct short passage directly between the utricle and the ampulla (alongside the main long-arm duct already modeled), through which settled debris can slide back in if a repositioning maneuver's final seated position isn't tilted nose-down enough. Modeled as two straight segments through an approximate waypoint, with the same latency-and-inertia structure as ordinary canalithiasis but independently time-scaled. This pathway exists in the code but is currently switched off in the running app (see &sect;5).</p>
@@ -455,7 +459,8 @@
       <li><strong>Teaching-time compression.</strong> The mobility constant driving clot speed is a physically-derived value multiplied by a <code>TEACHING_MODE_TIME_SCALE</code> of 19&times; purely for legibility &mdash; a real-time mode is not implemented, though the underlying physical constant is retained in code for future use. The same compression is applied independently to the short-arm pathway and to every scripted maneuver's hold durations (Zuma's real ~3-minute holds compress to roughly 20 seconds on screen).</li>
       <li><strong>Linear eye-decomposition.</strong> Torsional/vertical/horizontal components come from projecting one combined rotation onto three fixed direction cosines, valid only at the modest deflection angles this simulator produces.</li>
       <li><strong>Short-arm geometry as two straight segments</strong> through an approximate waypoint, rather than a traced centerline &mdash; a smooth spline was explicitly judged as "false precision" given the underlying data's own resolution.</li>
-      <li><strong>Horizontal-canal tilt magnitude</strong> comes out ~16&deg; from true horizontal in this model, versus a commonly quoted ~30&deg; in clinical teaching &mdash; left as a flagged, unresolved discrepancy rather than force-fit (see &sect;5).</li>
+      <li><strong>Whole-ear tilt correction (resolved).</strong> The horizontal canal's derived tilt (~16&deg; from true horizontal, versus a commonly quoted ~30&deg; in clinical teaching) was traced to this app mapping the literature data's Frankfort/Reid-plane reference directly onto gravitational upright with no correction. A single rigid rotation, sized to a citable Frankfort-vs-natural-head-position measurement (~13&deg; for standing subjects) rather than fit to the 30&deg; target, brings the derived tilt to ~29&deg;.</li>
+      <li><strong>Posterior/horizontal asymmetry is deliberate, not inconsistent.</strong> The posterior canal keeps a gravity-anchored resting point while the horizontal canal uses a real-anchor-derived one. Real centerline data confirms this is correct: the posterior canal's own centerline coordinates increase monotonically toward the ampulla (gravity's true rest point really is there), while the horizontal canal's decrease away from its ampulla (rest is genuinely ~108&deg; away) &mdash; opposite real anatomical facts, not an arbitrary difference in how the two canals are coded.</li>
       <li><strong>Maneuver waypoint angles are teaching approximations</strong>, not patient-specific or clinically validated positioning angles.</li>
       <li><strong>Cupula elevation direction in the 3D scene is schematic.</strong> An earlier attempt to derive it from real per-canal cupula landmarks was tried and rejected: those landmarks turned out to be mostly in-plane with the canal (dot product only ~0.1&ndash;0.15 with the plane normal), which would have rendered debris 5&ndash;7&nbsp;mm off target.</li>
       <li><strong>Mesh alignment by translation only,</strong> not rotation &mdash; per-canal rotation of the whole real-anatomy assembly was tried and rejected in favor of plain translation.</li>
@@ -495,7 +500,15 @@
           </tr>
           <tr>
             <td>IEMap_data_v_1_0 dataset</td>
-            <td>Real per-canal duct centerline stations, cupula landmarks, and ampulla/utricle/saccule mesh geometry &mdash; both as a physics input (horizontal-canal ampulla anchor) and as the "realistic"/"detailed" 3D scene overlay.</td>
+            <td>Real per-canal duct centerline stations, cupula landmarks, and ampulla/utricle/saccule mesh geometry &mdash; both as a physics input (horizontal-canal ampulla anchor) and as the "realistic"/"detailed" 3D scene overlay; also used to independently confirm the posterior canal's gravity-anchored resting point via real centerline Z-ordering.</td>
+          </tr>
+          <tr>
+            <td><em>The Frankfort horizontal as a basis for cephalometric analysis</em>, Am J Orthod Dentofacial Orthop. 1995;108(5):488&ndash;92</td>
+            <td>Establishes that the Frankfort horizontal plane is not reliably parallel to true gravitational horizontal in natural head position &mdash; the mechanism behind <code>ANATOMY_TILT_CORRECTION_DEG</code>.</td>
+          </tr>
+          <tr>
+            <td><em>Variation between natural head orientation and Frankfort horizontal planes in orthognathic surgery patients: 187 consecutive cases</em> (PubMed 33632574) and companion natural-head-position studies</td>
+            <td>Source of the ~13&deg; (standing) Frankfort-horizontal-to-true-horizontal figure used to size <code>ANATOMY_TILT_CORRECTION_DEG</code>.</td>
           </tr>
         </tbody>
       </table>
@@ -511,16 +524,8 @@
       Short-arm re-entry is implemented but switched off in the running app (<code>SHORT_ARM_REENTRY_ENABLED = false</code>) &mdash; it was firing too easily in practice and is disabled pending further tuning, without deleting the pathway itself.
     </div>
     <div class="flag">
-      <span class="label">Unresolved discrepancy</span>
-      The horizontal canal's derived tilt (~16&deg; from true horizontal) is smaller than the ~30&deg; commonly quoted in clinical teaching for "nose-down to bring the horizontal canal into true horizontal." Flagged as a magnitude question, not a sign question &mdash; the coplanarity cross-checks strongly support the direction being correct.
-    </div>
-    <div class="flag">
       <span class="label">Unverified against clinical data</span>
       The <code>debrisOnUtricularSide</code> geotropic/apogeotropic sign convention has not been independently checked against real VOG recordings.
-    </div>
-    <div class="flag">
-      <span class="label">Estimated, not measured</span>
-      The interactive release threshold's ~3&times; scaling relative to the scripted-maneuver threshold has no independent interactive-specific acceleration data behind it &mdash; it mirrors the ratio used for the predecessor speed-based threshold.
     </div>
     <div class="flag">
       <span class="label">Known alignment tolerance</span>
@@ -529,6 +534,18 @@
     <div class="flag">
       <span class="label">Not yet built</span>
       No uncompressed, real-time physics mode exists; the underlying physical mobility constant is exported and ready, but nothing in the UI currently exposes it.
+    </div>
+    <div class="flag">
+      <span class="label">Resolved &mdash; horizontal-canal tilt</span>
+      Previously flagged as an unresolved ~16&deg; vs ~30&deg; discrepancy. Traced to this app mapping the literature data's Frankfort/Reid-plane reference directly onto gravitational upright with no correction, and fixed with a citable ~13&deg; whole-ear rotation (see &sect;2/&sect;3) rather than a guessed fudge factor. Lands at ~29&deg;, not exactly 30, since it's now driven by an independent measurement rather than the clinical target itself.
+    </div>
+    <div class="flag">
+      <span class="label">Resolved &mdash; gyro release bug</span>
+      Phone gyroscope input could not trigger cupula release at all, because the physics loop's fixed 120Hz timestep was used to compute angular velocity even though <code>deviceorientation</code> events arrive slower &mdash; inflating, then clamping away, the real velocity signal. Fixed by tracking each gyro sample's real wall-clock timestamp and using true elapsed time between samples.
+    </div>
+    <div class="flag">
+      <span class="label">Investigated, not adopted &mdash; posterior real-anchor treatment</span>
+      Giving the posterior canal the same real-ampulla-anchor treatment already used for the horizontal canal was tried twice on a feature branch. Both attempts were reverted: the resulting resting point sat within a few degrees of the duct's modeled far wall, and real centerline data confirmed the existing gravity-anchored treatment is the anatomically correct one for this canal specifically (see &sect;2/&sect;3). Recorded in full in source comments so this isn't re-investigated from scratch later.
     </div>
   </section>
 
@@ -545,10 +562,6 @@
       <p>A single sign flip currently stands in for the full attachment-geometry distinction. Comparing simulated horizontal-canal nystagmus direction against published geotropic vs. apogeotropic VOG recordings would either confirm the shortcut or reveal where it breaks down.</p>
     </div>
     <div class="improve">
-      <h4>Resolve the horizontal-canal tilt discrepancy<span class="impact">anatomical fidelity</span></h4>
-      <p>Reconciling the derived ~16&deg; figure against the clinically quoted ~30&deg; &mdash; likely by cross-checking against a second independent anatomical dataset &mdash; would settle a magnitude question the codebase currently just documents rather than resolves.</p>
-    </div>
-    <div class="improve">
       <h4>Full 3D eye-rotation decomposition<span class="impact">physics depth</span></h4>
       <p>Replacing the linear direction-cosine projection with a proper Euler/quaternion decomposition would remove the small-angle caveat and let the eye model handle larger provoked deflections accurately, e.g. for exaggerated teaching demonstrations.</p>
     </div>
@@ -562,7 +575,7 @@
     </div>
     <div class="improve">
       <h4>Independent interactive-release calibration<span class="impact">physics depth</span></h4>
-      <p>Capturing real mouse-drag/gyro acceleration traces from users and measuring where accidental release actually starts would replace the current borrowed 3&times; scaling factor with a measured one.</p>
+      <p>The interactive threshold now matches the scripted one exactly, on the reasoning that canal-axis projection removed the need for a margin. That reasoning hasn't been checked against real mouse-drag/gyro acceleration traces from users, which would confirm (or reveal a need to adjust) the assumption directly rather than by inference.</p>
     </div>
     <div class="improve">
       <h4>Scenario presets and a guided teaching mode<span class="impact">teaching experience</span></h4>
@@ -572,7 +585,7 @@
 
   <section id="close">
     <h2><span class="num">7</span>Closing assessment</h2>
-    <p>The simulator's defining trait is not any single physical model &mdash; each mechanism (Stokes-drag clot transport, first-order cupula relaxation, linear VOR gain) is intentionally simple &mdash; but the discipline with which every simplification, citation, and rejected alternative is recorded next to the code it governs. That makes the open questions in &sect;5 tractable rather than hidden: each is a specific, scoped, already-partially-investigated gap rather than an undocumented guess. The improvements in &sect;6 are, in that sense, mostly a matter of finishing work the codebase has already started and flagged for itself.</p>
+    <p>The simulator's defining trait is not any single physical model &mdash; each mechanism (Stokes-drag clot transport, first-order cupula relaxation, linear VOR gain) is intentionally simple &mdash; but the discipline with which every simplification, citation, and rejected alternative is recorded next to the code it governs. That makes the open questions in &sect;5 tractable rather than hidden: each is a specific, scoped, already-partially-investigated gap rather than an undocumented guess. This edition's own history demonstrates the pattern working as intended: the horizontal-canal tilt question moved from "flagged discrepancy" to "resolved with a citation" by following exactly this discipline, and a plausible-looking follow-on change (extending the same fix to the posterior canal) was caught, investigated, and correctly rejected using the same real-anatomy evidence the codebase already trusts elsewhere. The improvements in &sect;6 are, in that sense, mostly a matter of finishing work the codebase has already started and flagged for itself.</p>
   </section>
 
   <footer>
