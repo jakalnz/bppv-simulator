@@ -167,6 +167,10 @@ body {
   color: var(--text-dim);
 }
 
+.about-popover p {
+  margin: 8px 0 0;
+}
+
 /* Ear/canal/pathology/debris-side toggles, moved out of the control bar's own row and
  * into this popup (see controls.ts's variantButton/variantPopover) -- fixed/appended to
  * <body> for the same overflow:hidden-escaping reason as .about-popover, positioned
