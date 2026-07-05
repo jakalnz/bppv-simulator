@@ -76,6 +76,7 @@ const HEAD_FRAME_TO_DEVICE: Quat = quatInvert(DEVICE_TO_HEAD_FRAME);
 export class DeviceOrientationSource implements OrientationSource {
   private latestRaw: Quat | null = null;
   private zeroInv: Quat | null = null;
+  private latestRawAtMs: number | null = null;
 
   start(): void {
     window.addEventListener('deviceorientation', this.onEvent);
@@ -104,6 +105,11 @@ export class DeviceOrientationSource implements OrientationSource {
     return this.zeroInv !== null;
   }
 
+  /** See OrientationSource's own doc comment for why this exists and how it's used. */
+  sampleTimestampMs(): number | null {
+    return this.latestRawAtMs;
+  }
+
   private onEvent = (e: DeviceOrientationEvent): void => {
     if (e.alpha == null || e.beta == null || e.gamma == null) return;
     const qDevice = rawQuatFromDeviceOrientation(e.alpha, e.beta, e.gamma);
@@ -113,6 +119,7 @@ export class DeviceOrientationSource implements OrientationSource {
     // the device->headframe conversion), then the HeadFrame-native quaternion is
     // qDevice composed with HEAD_FRAME_TO_DEVICE.
     this.latestRaw = quatCompose(qDevice, HEAD_FRAME_TO_DEVICE);
+    this.latestRawAtMs = performance.now();
   };
 }
 
