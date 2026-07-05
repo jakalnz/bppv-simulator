@@ -77,6 +77,22 @@ export interface EyeMovementComponents {
  * over, since a mirrored canal normal doesn't preserve orientation/sign conventions
  * automatically.
  *
+ * torsionalDeg's sign convention: positive = counterclockwise as seen looking at the top
+ * of the eye from the front (eyeScene.ts's camera sits on +Z looking at the origin down
+ * -Z, and applies torsionalDeg as a rotation about +Z with no extra sign flip, which by
+ * the right-hand rule is CCW from that viewpoint -- i.e. the examiner's/screen's own
+ * view). Checked against the clinical picture the same way the vertical sign above was:
+ * for right-ear posterior canalithiasis in the Dix-Hallpike provoking position, the
+ * torsional FAST (quick) phase should beat toward the affected (right) ear -- which, on
+ * a screen showing the patient from the examiner's side (patient's right ear appears on
+ * screen-LEFT, same mirrored-view convention as the horizontal quick-phase test in
+ * ewaldAsymmetry.test.ts), means the top of the eye snapping toward screen-left, i.e.
+ * CCW. Numerically simulating that exact provoking position showed the RAW projection
+ * below produces a quick phase that decreases (CW) instead -- negated here to correct
+ * it. (vor.test.ts's cross-ear sign-flip test is unaffected: negating a uniformly-applied
+ * factor before the cross-ear comparison doesn't change which of two values is
+ * oppositely-signed from the other.)
+ *
  * eyeAngle is corrected by eyeRotationSenseSign before being combined with the plane
  * normal -- see that function's comment in canal.ts for why: without it, this produced
  * IDENTICAL horizontal-nystagmus direction for both ears' own-ear-down roll-test
@@ -88,7 +104,7 @@ export function decomposeEyeMovement(eyeAngle: number, selector: CanalSelector):
   const n = CANAL_PLANE_NORMAL[selector.canal][selector.side]; // HeadFrame: [X anterior, Y left, Z superior]
   const angle = eyeAngle * eyeRotationSenseSign(selector.canal, selector.side);
   return {
-    torsionalDeg: angle * n[0] * RAD2DEG,
+    torsionalDeg: -angle * n[0] * RAD2DEG,
     verticalDeg: angle * n[1] * RAD2DEG,
     horizontalDeg: angle * n[2] * RAD2DEG,
   };
