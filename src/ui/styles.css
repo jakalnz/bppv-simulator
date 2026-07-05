@@ -171,6 +171,29 @@ body {
   margin: 8px 0 0;
 }
 
+.about-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.about-qr canvas {
+  border-radius: 4px;
+  /* Canvas backing store is rendered larger (132px, see index.html/main.ts) than its
+     displayed CSS size here, so it stays crisp on hi-DPI screens rather than upscaling
+     a 1:1-rendered bitmap. */
+  width: 110px;
+  height: 110px;
+}
+
+.about-qr span {
+  font-size: 0.65rem;
+  color: var(--text-faint);
+  text-align: center;
+}
+
 /* Ear/canal/pathology/debris-side toggles, moved out of the control bar's own row and
  * into this popup (see controls.ts's variantButton/variantPopover) -- fixed/appended to
  * <body> for the same overflow:hidden-escaping reason as .about-popover, positioned

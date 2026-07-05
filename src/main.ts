@@ -14,6 +14,7 @@ import { CupulaReleaseDetector, initialReleaseDetector, updateReleaseDetector } 
 import { updateVor, initialVorState, VorState, decomposeEyeMovement } from './physics/vor';
 import { CanalSelector, CanalType, Pathology, CANAL_PLANE_NORMAL, S_COMMON_CRUS } from './physics/canal';
 import earAnatomyData from './scene/earAnatomy.json';
+import QRCode from 'qrcode';
 
 import { Maneuver } from './maneuvers/types';
 import { ManeuverPlayer } from './maneuvers/playback';
@@ -118,6 +119,10 @@ const reenteredToast = makeToast('canal-reentered-toast');
 // instead, computed fresh each time it opens (panel size varies by breakpoint).
 const canalAboutPill = document.getElementById('canal-about-pill') as HTMLButtonElement;
 const canalAboutPopover = document.getElementById('canal-about-popover') as HTMLDivElement;
+const aboutQrCanvas = document.getElementById('about-qr-canvas') as HTMLCanvasElement;
+// Generated once (client-side, no network call) rather than on every popover open --
+// the deployed URL never changes at runtime, so there's nothing to regenerate for.
+let aboutQrRendered = false;
 canalAboutPill.addEventListener('click', () => {
   const opening = canalAboutPopover.hidden;
   canalAboutPopover.hidden = !opening;
@@ -125,6 +130,16 @@ canalAboutPill.addEventListener('click', () => {
     const rect = canalAboutPill.getBoundingClientRect();
     canalAboutPopover.style.top = `${rect.bottom + 4}px`;
     canalAboutPopover.style.right = `${window.innerWidth - rect.right}px`;
+    if (!aboutQrRendered) {
+      aboutQrRendered = true;
+      QRCode.toCanvas(aboutQrCanvas, 'https://jakalnz.github.io/bppv-simulator/', { width: 132, margin: 1 }).catch(
+        () => {
+          // Best-effort only -- a demo aid, not core functionality; leave the canvas
+          // blank rather than surface an error if generation somehow fails.
+          aboutQrRendered = false;
+        }
+      );
+    }
   }
 });
 document.addEventListener('click', (e) => {
