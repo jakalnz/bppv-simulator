@@ -220,20 +220,24 @@ export const CUPULA_GRAVITY_GAIN = 0.08;
 export const RELEASE_DECEL_THRESHOLD = 13;
 
 /**
- * Separate (much higher) threshold used ONLY for interactive orientation sources
- * (mouse-drag/gyro, see main.ts's stepPhysicsOnce) -- RELEASE_DECEL_THRESHOLD itself
- * stays untouched since it's precisely calibrated against every scripted maneuver's own
- * measured peaks (see that constant's comment/cupulaRelease.test.ts) and changing it
- * would break that discrimination. Interactive input is a different situation:
- * mouse-drag applies raw un-throttled pointermove deltas (and gyro raw device-sensor
- * deltas) directly, with no scripted waypoint pacing behind it, so an ordinary
- * brisk-but-unintentional head-turn could otherwise silently convert cupulolithiasis
- * into canalithiasis, matching the same "way too easy to accidentally detach the
- * cupula" failure mode the old speed-based INTERACTIVE_RAPID_SPEED_THRESHOLD was raised
- * to prevent (scaled by the same ratio, ~3x, since no separate interactive-specific
- * acceleration data exists yet).
+ * Threshold used for interactive orientation sources (mouse-drag/gyro, see main.ts's
+ * stepPhysicsOnce). Previously set far above RELEASE_DECEL_THRESHOLD (~3x, at 40) as a
+ * blunt guard against mouse-drag's raw un-throttled pointermove deltas (and gyro's raw
+ * device-sensor deltas) accidentally converting cupulolithiasis into canalithiasis --
+ * that guard was calibrated back when the release signal was omnidirectional angular
+ * speed, so ANY fast movement in ANY direction could trigger it, and casual interactive
+ * motion easily exceeded it.
+ *
+ * Now that release is gated on acceleration projected onto the SPECIFIC canal's own
+ * axis (see cupulaRelease.ts/RELEASE_DECEL_THRESHOLD's comment), that omnidirectional
+ * false-positive risk is largely gone: ordinary interactive dragging rarely aligns
+ * tightly enough with one particular canal's axis to rack up a large projected
+ * acceleration, even at casual speeds. Confirmed empirically as too conservative --
+ * 40 rad/s^2 could not be reached even with a deliberate fast interactive flick -- so
+ * this is set equal to the scripted-maneuver threshold rather than inflated by an
+ * arbitrary safety margin that's no longer doing useful work.
  */
-export const INTERACTIVE_RELEASE_DECEL_THRESHOLD = 40;
+export const INTERACTIVE_RELEASE_DECEL_THRESHOLD = RELEASE_DECEL_THRESHOLD;
 
 /**
  * Low-pass filter time constant (seconds) applied to the canal-axis-projected angular

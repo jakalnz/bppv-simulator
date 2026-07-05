@@ -393,11 +393,10 @@ function stepPhysicsOnce(dt: number): void {
   const omegaBody = angularVelocityBody(prevQHeadForVelocity, qHead, dt);
   prevQHeadForVelocity = qHead;
   let released: boolean;
-  // Interactive sources (mouse-drag/gyro) get a much higher threshold than scripted
-  // maneuvers -- see INTERACTIVE_RELEASE_DECEL_THRESHOLD's doc comment: the default is
-  // precisely calibrated to each maneuver's own scripted waypoint accelerations, but
-  // ordinary brisk interactive movement (no scripted pacing behind it) easily exceeded
-  // it, accidentally converting cupulolithiasis into canalithiasis.
+  // Interactive sources (mouse-drag/gyro) use the same threshold as scripted maneuvers
+  // now that release is canal-axis-projected rather than omnidirectional -- see
+  // INTERACTIVE_RELEASE_DECEL_THRESHOLD's doc comment for why the old ~3x margin is no
+  // longer needed.
   const decelThreshold = mode === 'maneuver' ? RELEASE_DECEL_THRESHOLD : INTERACTIVE_RELEASE_DECEL_THRESHOLD;
   const canalAxis = CANAL_PLANE_NORMAL[selector.canal][selector.side];
   [releaseDetector, released] = updateReleaseDetector(releaseDetector, omegaBody, canalAxis, dt, decelThreshold);
