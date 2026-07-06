@@ -109,9 +109,19 @@ export const RAD2DEG = 180 / Math.PI;
  * rotation q_rel = qPrev^-1 * qCurr maps head_curr -> head_prev, i.e. describes the
  * reorientation in a frame that is (for small dt) approximately the body frame -- so its
  * axis-angle, divided by dt, is the body-frame angular velocity vector.
+ *
+ * Same unclamped-acos NaN hazard as quatAngleBetween's doc comment describes (gl-matrix's
+ * quat.getAxisAngle also does Math.acos(q[3]) with no clamping) -- confirmed via the
+ * debug telemetry recorder (debug/telemetry.ts): a real gyro session's qRel[3] drifted
+ * fractionally above 1 after enough accumulated quatCompose/quatInvert calls, producing
+ * NaN that then poisoned the release detector's smoothed speed for the REST of the
+ * session (see cupulaRelease.ts). quatAngleBetween clamps its own dot product before
+ * acos already; this function needs the equivalent clamp on qRel's w component, since it
+ * calls gl-matrix's getAxisAngle directly rather than going through quatAngleBetween.
  */
 export function angularVelocityBody(qPrev: Quat, qCurr: Quat, dt: number): Vec3 {
   const qRel = quatCompose(quatInvert(qPrev), qCurr);
+  qRel[3] = Math.max(-1, Math.min(1, qRel[3]));
   const axis = vec3.create();
   const angle = quat.getAxisAngle(axis, qRel);
   // getAxisAngle returns an angle in [0, 2*pi]; treat >pi as the equivalent short
