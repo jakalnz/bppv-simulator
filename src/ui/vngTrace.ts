@@ -94,7 +94,16 @@ export class VngTrace {
       ctx.stroke();
     }
 
-    this.drawTrace((s) => s.horizontalDeg, COLOR_HORIZONTAL, xForT, yForDeg);
+    // Horizontal channel is drawn NEGATED relative to the raw horizontalDeg sign: per
+    // eyeScene.ts's verified screen convention, positive horizontalDeg = pupil moves
+    // screen-RIGHT, and a fast phase toward the patient's right ear appears as
+    // screen-LEFT (decreasing horizontalDeg) on that mirrored exam view (see
+    // ewaldAsymmetry.test.ts's "quick-phase screen-direction convention" tests). But the
+    // clinical VNG strip-chart convention plots a right-beating fast phase as an UPWARD
+    // deflection -- so this channel alone is negated before going through yForDeg
+    // (which already maps increasing value -> upward) to match that trace convention,
+    // independent of the 3D eye view's own (correct, unnegated) screen-direction sign.
+    this.drawTrace((s) => -s.horizontalDeg, COLOR_HORIZONTAL, xForT, yForDeg);
     this.drawTrace((s) => s.verticalDeg, COLOR_VERTICAL, xForT, yForDeg);
     this.drawTrace((s) => s.torsionalDeg, COLOR_TORSIONAL, xForT, yForDeg);
   }

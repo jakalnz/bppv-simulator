@@ -1,5 +1,5 @@
 import { Vec3, dot } from './types';
-import { canalTangent, CanalSelector, S_MAX, S_COMMON_CRUS } from './canal';
+import { canalTangent, CanalSelector, EarSide, CanalType, restingArcS, S_MAX, S_COMMON_CRUS } from './canal';
 import { K_MOBILITY, LATENCY_SECONDS, CLOT_INERTIA_TAU, DRIVE_EPSILON } from './params';
 
 export interface CanalithState {
@@ -51,7 +51,22 @@ export interface CanalithState {
   clearedIntoUtricle: boolean;
 }
 
-export function initialCanalithState(): CanalithState {
+/**
+ * Fresh canalithiasis state at rest with the head upright, BEFORE any provoking
+ * maneuver -- starts at restingArcS(canal, side) (see canal.ts), not necessarily the
+ * ampulla, since real duct geometry (checked for the horizontal canal specifically)
+ * shows gravity's true resting point does not coincide with the ampulla for every
+ * canal. Use canalithStateAtAmpulla instead for debris that has just mechanically
+ * arrived AT the ampulla (cupula release, short-arm re-entry) -- those events are
+ * physically anchored to s=0 regardless of canal type, not a resting-state question.
+ */
+export function initialCanalithState(canal: CanalType, side: EarSide): CanalithState {
+  return { s: restingArcS(canal, side), dsdt: 0, latencyTimer: 0, released: false, lastTargetSign: 0, clearedIntoUtricle: false };
+}
+
+/** Debris that has just mechanically arrived at the ampulla (s=0) -- see
+ * initialCanalithState's doc comment for why this is a separate function. */
+export function canalithStateAtAmpulla(): CanalithState {
   return { s: 0, dsdt: 0, latencyTimer: 0, released: false, lastTargetSign: 0, clearedIntoUtricle: false };
 }
 
