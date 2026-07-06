@@ -34,45 +34,28 @@ function mirrorAcrossSagittal(n: Vec3): Vec3 {
 /**
  * EXPERIMENTAL correction, feature-branch only: rotates a HeadFrame vector about the
  * interaural axis (HeadFrame Y, left-right, unaffected by this rotation) by
- * ANATOMY_TILT_CORRECTION_DEG.
- *
- * NOT an arbitrary fudge to hit the clinical ~30-degree horizontal-canal figure --
- * traced to a specific, named, independently-measured error source. Wu et al.'s own
- * coordinate system is explicitly stated as referenced to a plane "parallel to
- * Frankfort/Reid's plane" (see LEFT_PLANE_NORMAL's doc comment), and this app maps their
- * Z axis directly onto HeadFrame's vertical (true gravitational upright at q_head =
- * identity) with no correction -- silently assuming Frankfort-horizontal-level and
- * true-gravitational-upright are the same posture. Cephalometric literature says they
- * are not: "no person has the Frankfort horizontal plane parallel to the ground"
- * (Frankfort horizontal as a basis for cephalometric analysis, Am J Orthod Dentofacial
- * Orthop. 1995;108(5):488-92), and the angle between Frankfort horizontal and true
- * (gravitational) horizontal in natural head position, standing, has been measured at
- * ~13 degrees on average (with real individual variation, smaller ~5-8 degrees seated --
- * see "Assessment of the Relationship of the Frankfort Horizontal Plane and the
- * Orbitomeatal Line with Attainment of the Natural Head Position").
- *
- * This is a DIFFERENT quantity from the horizontal canal's own ~25-30 degree tilt
- * relative to Frankfort/Reid's plane (already baked into Wu et al.'s reported normal,
- * not something to additionally correct for) -- conflating the two would double-count.
- * The correction here is specifically the Frankfort-plane-to-true-horizontal gap, i.e.
- * this app's implicit "upright = Frankfort-level" assumption versus real natural head
- * position, standing.
+ * ANATOMY_TILT_CORRECTION_DEG. Tests the hypothesis that the ~16-degree horizontal-canal
+ * tilt this app derives from Wu et al.'s literature normal (see LEFT_PLANE_NORMAL's doc
+ * comment) undershoots the commonly-quoted clinical ~30 degrees because the WHOLE
+ * anatomical reference frame (both canals' normals, plus the horizontal canal's real
+ * ampulla anchor) is tilted ~14 degrees off this app's own definition of upright, not
+ * because of an error specific to the horizontal canal alone -- i.e. a single rigid
+ * correction to every anatomy-derived vector should fix the horizontal number AND keep
+ * the posterior/horizontal coplanarity and RALP/LARP cross-checks intact, since those
+ * only depend on the vectors' relationships to EACH OTHER, not their absolute tilt.
  *
  * Rotating about Y (rather than X or the canal's own axis) is what makes this a single
- * global "this app's upright doesn't quite match Frankfort-level" correction instead of
- * a per-canal fudge -- pitching the head about the interaural axis is exactly the
- * "nose-down" adjustment the natural-head-position literature describes, and applying it
- * uniformly keeps the posterior/horizontal coplanarity and RALP/LARP cross-checks intact
- * (those only depend on the vectors' relationships to EACH OTHER, not their absolute
- * tilt).
+ * global "the whole ear was tilted" correction instead of a per-canal fudge: pitching
+ * the head about the interaural axis is exactly the "nose-down" motion the clinical
+ * "~30 degrees to bring the horizontal canal into true horizontal" teaching point
+ * describes.
  *
- * Set to 13 degrees, matching that standing-NHP-vs-Frankfort figure directly -- not
- * reverse-solved to hit 30 (it lands the horizontal canal's derived tilt at ~29.2
- * degrees, see canal.test.ts's tilt-angle assertion, close to but not exactly the
- * commonly-quoted ~30 because it's now driven by an independently-sourced number rather
- * than the target itself).
+ * +14 degrees moves the horizontal canal's derived tilt from ~16.2 to ~30.2 degrees (see
+ * canal.test.ts's tilt-angle assertion) -- solved for by matching the desired 30-degree
+ * target, then rounded to the clean number this experiment was framed around; not an
+ * independently-sourced anatomical correction angle.
  */
-const ANATOMY_TILT_CORRECTION_DEG = 13;
+const ANATOMY_TILT_CORRECTION_DEG = 14;
 
 function applyAnatomyTiltCorrection(v: Vec3): Vec3 {
   const rad = (ANATOMY_TILT_CORRECTION_DEG * Math.PI) / 180;
