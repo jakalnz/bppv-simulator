@@ -211,16 +211,13 @@ export const CUPULA_GRAVITY_GAIN = 0.08;
  * smaller derivative peak than the same discontinuity taken raw over one frame), which
  * is what makes a clean threshold on the smoothed derivative possible at all.
  *
- * EXPERIMENTAL BRANCH NOTE (see canal.ts's ANATOMY_TILT_CORRECTION_DEG): applying the
- * 14-degree whole-ear tilt correction shrank the posterior-canal discrimination gap
- * considerably -- gentle maneuvers now peak <= ~12.0 rad/s^2 and Semont/Zuma peak >=
- * ~12.8, versus <= ~11.3 / >= ~15.1 before the tilt. Retuned down from 13 to 12.4 to sit
- * back in the (now much narrower) gap; horizontal-canal discrimination is largely
- * unaffected (gentle maneuvers, including posterior-plane Semont, stay <= ~10.6, only
- * Zuma exceeds at ~20.3). The narrower posterior margin is a genuine side effect of
- * tilting the posterior canal's own literature normal by the same correction as the
- * horizontal canal's, not a tuning mistake -- worth weighing against the tilt's benefit
- * to the horizontal-canal angle before merging this experiment.
+ * With ANATOMY_TILT_CORRECTION_DEG currently zeroed (see canal.ts), the discrimination
+ * gap is: posterior gentle maneuvers peak <= ~11.3 rad/s^2, rapid ones (Semont/Zuma) >=
+ * ~15.1; horizontal gentle maneuvers (including posterior-plane Semont) peak <= ~9.4,
+ * only Zuma exceeds at ~18.9. 12.4 sits comfortably inside both gaps. (An earlier
+ * 14-degree tilt experiment shrank the posterior gap to ~12.0/~12.8, which is why this
+ * was retuned down from 13 at the time -- re-check this comment if the tilt correction
+ * is ever reintroduced.)
  */
 export const RELEASE_DECEL_THRESHOLD = 12.4;
 

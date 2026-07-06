@@ -194,6 +194,29 @@ body {
   text-align: center;
 }
 
+/* Debug telemetry controls (see debug/telemetry.ts) -- deliberately understated, this
+ * is a developer aid for retuning release thresholds against real sensor data, not a
+ * user-facing feature. */
+.about-debug {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-faint, rgba(128, 128, 128, 0.25));
+}
+
+.about-debug .about-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#debug-record-status {
+  font-size: 0.65rem;
+  color: var(--text-faint);
+}
+
 /* Ear/canal/pathology/debris-side toggles, moved out of the control bar's own row and
  * into this popup (see controls.ts's variantButton/variantPopover) -- fixed/appended to
  * <body> for the same overflow:hidden-escaping reason as .about-popover, positioned

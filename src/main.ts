@@ -37,6 +37,7 @@ import { Controls, ManeuverKey, PlaybackMode } from './ui/controls';
 import { VngTrace } from './ui/vngTrace';
 import { keepScreenAwake } from './ui/wakeLock';
 import { initTheme, toggleTheme } from './ui/theme';
+import { isRecording, startRecording, stopRecording, recordSample, sampleCount, exportRecordingAsJson } from './debug/telemetry';
 
 keepScreenAwake();
 initTheme();
@@ -150,6 +151,30 @@ document.addEventListener('click', (e) => {
   ) {
     canalAboutPopover.hidden = true;
   }
+});
+
+// Debug telemetry controls (see debug/telemetry.ts) -- lets a real gyro/mouse-drag
+// maneuver (e.g. Zuma, Semont) be recorded and exported as JSON, to retune
+// RELEASE_DECEL_THRESHOLD/INTERACTIVE_RELEASE_DECEL_THRESHOLD against real sensor data
+// rather than guessing.
+const debugRecordToggle = document.getElementById('debug-record-toggle') as HTMLButtonElement;
+const debugExportBtn = document.getElementById('debug-export-btn') as HTMLButtonElement;
+const debugRecordStatus = document.getElementById('debug-record-status') as HTMLSpanElement;
+debugRecordToggle.addEventListener('click', () => {
+  if (isRecording()) {
+    stopRecording();
+    debugRecordToggle.textContent = 'Start debug recording';
+    debugExportBtn.disabled = sampleCount() === 0;
+    debugRecordStatus.textContent = `${sampleCount()} samples recorded`;
+  } else {
+    startRecording(simulationTimeSeconds);
+    debugRecordToggle.textContent = 'Stop debug recording';
+    debugExportBtn.disabled = true;
+    debugRecordStatus.textContent = 'recording...';
+  }
+});
+debugExportBtn.addEventListener('click', () => {
+  exportRecordingAsJson();
 });
 
 const canalStyleSelect = document.getElementById('canal-style-select') as HTMLSelectElement;
@@ -445,7 +470,25 @@ function stepPhysicsOnce(dt: number): void {
   // longer needed.
   const decelThreshold = mode === 'maneuver' ? RELEASE_DECEL_THRESHOLD : INTERACTIVE_RELEASE_DECEL_THRESHOLD;
   const canalAxis = CANAL_PLANE_NORMAL[selector.canal][selector.side];
+  const prevSmoothedOmega = releaseDetector.smoothedOmega;
   [releaseDetector, released] = updateReleaseDetector(releaseDetector, omegaBody, canalAxis, dt, decelThreshold);
+  // Debug telemetry (see debug/telemetry.ts) -- purely an observer, toggled from the
+  // About popover, for retuning RELEASE_DECEL_THRESHOLD/INTERACTIVE_RELEASE_DECEL_THRESHOLD
+  // against real recorded sensor traces instead of guessing.
+  if (isRecording()) {
+    const projectedOmega = omegaBody[0] * canalAxis[0] + omegaBody[1] * canalAxis[1] + omegaBody[2] * canalAxis[2];
+    recordSample(simulationTimeSeconds, {
+      canal: selector.canal,
+      side: selector.side,
+      mode,
+      projectedOmega,
+      smoothedOmega: releaseDetector.smoothedOmega,
+      decel: (releaseDetector.smoothedOmega - prevSmoothedOmega) / dt,
+      decelThreshold,
+      velocityDt,
+      released,
+    });
+  }
   if (selector.pathology === 'cupulolithiasis' && !cupulaDebrisReleased && released) {
     cupulaDebrisReleased = true;
     // Debris starts its free-floating life at the ampulla (s=0), same convention as
