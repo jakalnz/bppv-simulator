@@ -337,17 +337,11 @@ export class EyeScene {
    * Sign of the vertical rotation is negated so that, matching decomposeEyeMovement's
    * "positive = up" convention, a positive verticalDeg moves the pupil up on screen (a
    * positive rotation about +X by the right-hand rule moves +Z toward +Y i.e. DOWN, so
-   * the sign has to flip to get "up").
-   *
-   * Horizontal's screen-direction sign (positive horizontalDeg -> pupil moves toward
-   * +X -> screen-RIGHT, this being the default/unrotated camera-at-+Z-looking-at-origin
-   * convention) is verified against the clinical "named for the fast/quick phase"
-   * nystagmus convention on a mirrored exam view (examiner facing the patient, so the
-   * patient's right ear appears on screen-LEFT): for geotropic horizontal
-   * canalithiasis, rolled toward the affected (down) ear, the fast phase should beat
-   * toward that ear -- confirmed numerically in ewaldAsymmetry.test.ts's
-   * "quick-phase screen-direction convention" tests (right ear affected -> fast phase
-   * toward screen-LEFT, i.e. "right-beating"; mirrored for the left ear).
+   * the sign has to flip to get "up"). Horizontal's screen-direction sign is not
+   * independently verified beyond "some consistent left/right deflection" -- unlike
+   * vertical (checked against the textbook "upbeating" Dix-Hallpike description) there's
+   * no equivalent simple clinical landmark for horizontal-canal gaze direction sign in
+   * this view, so it's a labeling choice, flagged rather than assumed correct.
    */
   setEyeAngle({ horizontalDeg, verticalDeg, torsionalDeg }: EyeMovementComponents): void {
     const torsionQuat = new THREE.Quaternion().setFromAxisAngle(
