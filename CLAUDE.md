@@ -54,7 +54,65 @@ geometry and non-zeroed tilt) lives on the `investigate/horizontal-cupulolithias
 branch. **Advisor was asked for a second opinion on this branch tonight -- see its
 response below once it returns.**
 
-<!-- ADVISOR_RESPONSE_PLACEHOLDER -->
+### Advisor's second opinion (2026-07-06 night, run on `investigate/horizontal-cupulolithiasis`)
+
+**Key finding: CLAUDE.md's own "tilt ruled out" analysis only checked HALF of the
+relevant quantity, and the half it skipped is where the tilt's effect actually shows up.**
+
+`cupulolithiasisDrive` at s=0 decomposes as:
+`drive = dot(gHead, canalTangent(0)) = dot(g_inplane, e2) = |g_inplane| * sin(restingArcS)`
+
+Two independent factors multiply together:
+- **`|g_inplane}` upright** = `9.81 * sin(plane tilt from horizontal)`. Pre-tilt, the
+  horizontal canal's plane normal is ~16.3 deg off vertical -> `|g_inplane|` ~2.75.
+  `ANATOMY_TILT_CORRECTION_DEG = 13` swings that to ~29.2 deg off vertical (its whole
+  point was hitting the clinical ~30 deg figure) -> `|g_inplane|` ~4.79 -- **nearly
+  DOUBLING** the upright in-plane gravity magnitude.
+- **`sin(restingArcS)`** ~ sin(108 deg) ~ 0.95 -- barely moves with the tilt correction.
+  **This is the ONLY factor CLAUDE.md's original numerical check (the "~108/113/115/135
+  degrees" comparison across tilt=0/13/-13) actually measured.**
+
+So: upright drive ~= 4.79 * 0.95 ~= 4.5, matching the reported measured value of 4.56.
+CLAUDE.md concluded "the tilt isn't the main driver" by checking `restingArcS`, which is
+precisely the factor that DOESN'T carry the tilt's effect -- the magnitude factor
+(`|g_inplane|`) does, and that's the one blowing up the upright drive. **The tilt
+correction is very likely a PRIMARY contributor to the upright-constant-beating symptom,
+not a ruled-out bystander.**
+
+**Cheapest discriminating test (actionable right now, on `main`):** `main` already has
+`ANATOMY_TILT_CORRECTION_DEG = 0` with the real-ampulla anchor kept (commit `f89c347`).
+Measure `dot(gHead, canalTangent(0, selector))` upright vs. at the provoking roll extreme
+on `main` as it stands now. Advisor's estimate: upright drops from ~4.56 to ~2.5 while
+the provoking-position value stays ~3.4 (less tilt-sensitive, since gravity is already
+near-in-plane at large roll angles) -- which would FLIP the ordering back to clinically
+correct (provoking > upright) and largely fix the symptom already, without any further
+anchor-geometry surgery. **Should verify this numerically AND in the browser (upright
+cupulolithiasis should show no/minimal nystagmus) before doing anything else.**
+
+On the actual question asked (anchor-in-`canal.ts` vs. downstream-in-`cupulolithiasis.ts`):
+advisor agrees gravity's component along the real duct-tangent at the ampulla is the
+right MODEL, and the previously-reverted downstream offset patch was rightly rejected (a
+band-aid that broke the Ewald tests for a real reason -- see "What was tried and
+reverted" above). Keep the fix upstream. But "upstream" may just mean **tilt=0**, not
+reworking the anchor projection itself -- let the upright-vs-provoking measurement decide
+before touching the anchor.
+
+**One flag if tilt=0 does NOT fix it:** the provoking-position drive of 3.45 is
+suspiciously low -- it implies `sin(angle) ~ 0.35` at that position, i.e. gravity is
+nearly RADIAL to the ampulla (pointing along e1) at the pose that's supposed to MAXIMIZE
+deflection. That would point to either (a) the "provoking extreme" orientation tested
+not actually being the true max-deflection pose, or (b) the anchor mis-placing e2. Quick
+follow-up check if needed: sweep the roll angle, find the orientation that actually
+maximizes `|drive|`, and confirm it's a clinically sensible head position -- if it isn't,
+the anchor/e2 direction is genuinely implicated; if it is, it was only ever the tilt
+magnitude.
+
+**Bottom line / recommended next action:** Don't start by rewriting the anchor
+projection. First, on `main` (tilt already 0), numerically compare upright-vs-provoking
+`cupulolithiasisDrive` for right-ear horizontal cupulolithiasis, and check in the browser.
+That single measurement tells us whether this was a MAGNITUDE problem (tilt, already
+incidentally fixed by last night's revert-then-zero) or a DIRECTION problem (anchor
+genuinely wrong). May already be closer to resolved than these notes assumed.
 
 ---
 
