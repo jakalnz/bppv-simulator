@@ -233,6 +233,53 @@ const AMPULLA_ANCHOR_RIGHT_M: Partial<Record<CanalType, Vec3>> = {
   horizontal: HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M,
 };
 
+/**
+ * Real right-ear horizontal-canal duct tangent AT the ampulla (station[1] - station[0]
+ * of scene/earAnatomy.json's centerline, ampulla-first, normalized), pointing away from
+ * the ampulla (ampullofugal-positive, matching canalTangent's own sign convention).
+ *
+ * This is DIFFERENT from -- and not derivable from -- canalBasis's idealized-circle e2
+ * at s=0. e2 is a property of the idealized circle's rotated (e1, e2) basis (itself
+ * anchored to HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M's DIRECTION, not the real duct's local
+ * curvature), whereas the real duct doesn't curve like a circle centered where the
+ * idealized model puts it -- so e2 at s=0 and the real local tangent at the ampulla can
+ * and do point in meaningfully different directions.
+ *
+ * Confirmed this matters, numerically: dot(gravity, e2-at-s=0) upright vs. at the
+ * clinical roll-test provoking extreme (+-90 degree supine roll) are 2.65 vs 3.45 --
+ * barely discriminating, and sweeping the FULL roll range finds the model's own maximum
+ * at -160 degrees (near-prone, not a real diagnostic position), with supine-neutral
+ * (0 degrees roll, no clinical significance) already at 92% of that max. The REAL duct
+ * tangent computed here, by contrast, gives 1.16 upright vs. 7.14 at the same +-90
+ * provoking extreme (a much cleaner ~6x ratio) and its own sweep maximum sits near -135
+ * degrees with the +-90 provoking values already close to it (7.14 vs 9.73) -- i.e. the
+ * real tangent's response is genuinely concentrated around the clinically provoking
+ * region, unlike the idealized circle's.
+ *
+ * This is used ONLY for cupulolithiasisDrive (see cupulolithiasisTangent below), not for
+ * canalBasis/e1/e2 generally -- canalithiasis's free-debris resting-position use of the
+ * idealized circle (restingArcS, canalPosition, canalTangent at general s) is unaffected
+ * and untouched; that anchor was independently verified correct for ITS purpose (see
+ * HORIZONTAL_AMPULLA_ANCHOR_RIGHT_M's doc comment). Cupulolithiasis debris never moves
+ * along the idealized circle at all (it's fixed to the cupula), so there's no reason its
+ * drive has to be computed from the same idealized-circle machinery that free-floating
+ * canalithiasis debris needs for its position/arc-length model -- the two pathologies
+ * have different geometric needs from the same underlying anatomy.
+ */
+const HORIZONTAL_REAL_TANGENT_AT_AMPULLA_RIGHT_M: Vec3 = normalize(
+  applyAnatomyTiltCorrection(
+    v3(
+      -0.00043586698587356337 - 0.0012251330141264366,
+      -0.005602137232930256 - -0.0038101372329302557,
+      0.0006069132424125542 - 0.0008969132424125543
+    )
+  )
+);
+
+const REAL_TANGENT_AT_AMPULLA_RIGHT_M: Partial<Record<CanalType, Vec3>> = {
+  horizontal: HORIZONTAL_REAL_TANGENT_AT_AMPULLA_RIGHT_M,
+};
+
 interface CanalBasis {
   e1: Vec3;
   e2: Vec3;
@@ -390,4 +437,22 @@ export function canalPosition(s: number, selector: CanalSelector): Vec3 {
 export function canalTangent(s: number, selector: CanalSelector): Vec3 {
   const { e1, e2 } = canalBasis(selector.canal, selector.side);
   return normalize(add(scale(e1, -Math.sin(s)), scale(e2, Math.cos(s))));
+}
+
+/**
+ * Unit tangent (HeadFrame) AT THE CUPULA (s=0), for cupulolithiasis's fixed-attachment
+ * drive specifically (see cupulolithiasis.ts) -- uses the REAL duct tangent where one is
+ * available (see REAL_TANGENT_AT_AMPULLA_RIGHT_M's doc comment for why this differs from
+ * canalTangent(0, selector) for the horizontal canal), falling back to the idealized
+ * circle's canalTangent(0, selector) for canals with no real-tangent entry (currently
+ * just the posterior canal, whose gravity-anchored e1 already puts e2-at-s=0 in
+ * agreement with the real duct's own dependent direction -- see e1Direction's doc
+ * comment -- so there's no discrepancy to correct there).
+ */
+export function cupulaTangentAtAmpulla(selector: CanalSelector): Vec3 {
+  const realRight = REAL_TANGENT_AT_AMPULLA_RIGHT_M[selector.canal];
+  if (realRight) {
+    return selector.side === 'left' ? mirrorAcrossSagittal(realRight) : realRight;
+  }
+  return canalTangent(0, selector);
 }
