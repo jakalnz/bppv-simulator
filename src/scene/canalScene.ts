@@ -55,6 +55,15 @@ interface EarAnatomyCanal {
    * crista/cupula wall -- without it there's a visible gap between the slender duct tube
    * and the ampulla wall, see build.mjs. */
   ampullaBulgeMesh: string;
+  /** Only present for 'horizontal': the lateral canal's own non-ampullary junction wall
+   * into the utricle (ls_Hsapiens_SC.vtk, this dataset's "utricular sinus" piece) --
+   * unlike posterior/anterior, the lateral canal doesn't join the common crus, so without
+   * this piece its duct mesh's far end visibly ends in empty space instead of reaching
+   * the utricle mesh. See build.mjs's own comment for how this piece was identified. */
+  canalUtricleWallMesh?: string;
+  /** Centroid of canalUtricleWallMesh -- real interior waypoint for realExtensionCurves,
+   * same role commonCrusAnchor plays for posterior. Only present for 'horizontal'. */
+  canalUtricleWallAnchor?: [number, number, number];
 }
 interface EarAnatomyData {
   side: 'left' | 'right';
@@ -360,18 +369,27 @@ export class CanalScene {
     for (const [canal, anatomy] of Object.entries(EAR_ANATOMY.canals) as [string, EarAnatomyCanal][]) {
       this.realCenterlineCurves[canal] = new THREE.CatmullRomCurve3(anatomy.centerline.map((p) => toThreeVector3(p)));
       // Starts where the duct centerline ends (the non-ampullary far station) so there's
-      // no visible jump at the S_COMMON_CRUS handoff -- then, for 'posterior' (the only
-      // canal with a real common-crus landmark, see EarAnatomyCanal.commonCrusAnchor),
-      // through that landmark; every canal ends at the utricle's own centroid, which
-      // build.mjs recenters to exactly the shared assembly's local origin (0,0,0) -- see
-      // its "Utricle: recentered on the assembly anchor (its own centroid)" comment --
-      // so no separate lookup is needed for that endpoint.
+      // no visible jump at the S_COMMON_CRUS handoff -- then through a real interior
+      // junction landmark where one exists: 'posterior' routes through commonCrusAnchor
+      // (the posterior/anterior common-crus junction), 'horizontal' routes through
+      // canalUtricleWallAnchor (its own separate direct junction into the utricle, see
+      // EarAnatomyCanal.canalUtricleWallAnchor/build.mjs) -- without it the debris marker
+      // cut a straight line ignoring that real junction geometry. Every canal ends at the
+      // utricle's own centroid, which build.mjs recenters to exactly the shared
+      // assembly's local origin (0,0,0) -- see its "Utricle: recentered on the assembly
+      // anchor (its own centroid)" comment -- so no separate lookup is needed for that
+      // endpoint.
       const ductEnd = toThreeVector3(anatomy.centerline[anatomy.centerline.length - 1]);
       const utricleCenter = new THREE.Vector3(0, 0, 0);
-      const waypoints =
+      const junctionAnchor =
         canal === 'posterior'
-          ? [ductEnd, toThreeVector3(anatomy.commonCrusAnchor), utricleCenter]
-          : [ductEnd, utricleCenter];
+          ? anatomy.commonCrusAnchor
+          : canal === 'horizontal'
+            ? anatomy.canalUtricleWallAnchor
+            : undefined;
+      const waypoints = junctionAnchor
+        ? [ductEnd, toThreeVector3(junctionAnchor), utricleCenter]
+        : [ductEnd, utricleCenter];
       this.realExtensionCurves[canal] = new THREE.CatmullRomCurve3(waypoints);
 
       // Same utricleCenter/ampulla endpoints as above, but via the SHORT path (the
@@ -580,6 +598,12 @@ export class CanalScene {
       // crista/cupula wall structure.
       await loadInto(anatomy.ampullaBulgeMesh, this.ductMaterials[canal]);
       await loadInto(anatomy.connectorMesh, CONNECTOR_GLASS);
+      // Same material as the common crus (COMMON_CRUS_GLASS, not CONNECTOR_GLASS) --
+      // this plays the same role for the horizontal canal (bridging the duct's
+      // non-ampullary end into the utricle) that the common crus plays for
+      // posterior/anterior, so it reads as the same kind of junction, not as another
+      // ampulla<->utricle connector membrane.
+      if (anatomy.canalUtricleWallMesh) await loadInto(anatomy.canalUtricleWallMesh, COMMON_CRUS_GLASS);
     }
     await loadInto(EAR_ANATOMY.commonCrusMesh, COMMON_CRUS_GLASS);
     await loadInto(EAR_ANATOMY.utricleMesh, UTRICLE_GLASS);

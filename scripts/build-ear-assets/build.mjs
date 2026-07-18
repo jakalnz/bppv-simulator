@@ -308,6 +308,30 @@ const commonCrusMesh = mergeMeshes([ccA, ccP]);
 writeObj(join(OBJ_OUT_DIR, 'common-crus.obj'), commonCrusMesh.points, commonCrusMesh.indices);
 earAnatomy.commonCrusMesh = '/models/ear-anatomy/common-crus.obj';
 
+// Horizontal (lateral) canal's own non-ampullary junction into the utricle: unlike
+// posterior/anterior, the lateral canal doesn't join the common crus -- it opens
+// directly into the utricle on its own, via the "utricular sinus" (this dataset's
+// ls_Hsapiens_SC.vtk piece, otherwise unused by this script). Without it, the
+// horizontal duct mesh's far/non-ampullary end has no wall piece bridging it into the
+// utricle mesh, and visibly ends in empty space -- identified by checking SC.vtk's
+// centroid against the horizontal duct's far centerline station: ~1.3mm away, by far
+// the closest of the dataset's unused candidate pieces (UCp: ~2.3mm, utricle centroid
+// itself: ~3.2mm), with a bounding box overlapping both the duct and the utricle mesh.
+const horizontalCanalUtricleWallMesh = loadMeshHead('ls_Hsapiens_SC.vtk', ASSEMBLY_ANCHOR);
+writeObj(
+  join(OBJ_OUT_DIR, 'horizontal-canal-utricle-wall.obj'),
+  horizontalCanalUtricleWallMesh.points,
+  horizontalCanalUtricleWallMesh.indices
+);
+earAnatomy.canals.horizontal.canalUtricleWallMesh = '/models/ear-anatomy/horizontal-canal-utricle-wall.obj';
+// This piece's own centroid, same role as commonCrusAnchor plays for posterior: a real
+// interior waypoint canalScene.ts's realExtensionCurves can route the free-floating
+// debris marker through on its way from the duct's far end into the utricle, instead of
+// cutting a straight line that ignores this newly-added junction geometry.
+// horizontalCanalUtricleWallMesh.points is already recentered on ASSEMBLY_ANCHOR by
+// loadMeshHead, so its mean needs no further translation.
+earAnatomy.canals.horizontal.canalUtricleWallAnchor = mean(pointsToTriplets(horizontalCanalUtricleWallMesh.points));
+
 // Utricle: recentered on the assembly anchor (its own centroid), so it sits at the
 // assembly's local origin.
 const utricleMesh = loadMeshHead('ls_Hsapiens_utricle.vtk', ASSEMBLY_ANCHOR);

@@ -200,7 +200,13 @@
       "ductMesh": "/models/ear-anatomy/horizontal-duct.obj",
       "ampullaMesh": "/models/ear-anatomy/horizontal-ampulla.obj",
       "connectorMesh": "/models/ear-anatomy/horizontal-ampulla-utricle-wall.obj",
-      "ampullaBulgeMesh": "/models/ear-anatomy/horizontal-ampulla-bulge.obj"
+      "ampullaBulgeMesh": "/models/ear-anatomy/horizontal-ampulla-bulge.obj",
+      "canalUtricleWallMesh": "/models/ear-anatomy/horizontal-canal-utricle-wall.obj",
+      "canalUtricleWallAnchor": [
+        -0.00212054138949754,
+        -0.00031144982267350364,
+        -0.0008786464509974538
+      ]
     }
   },
   "commonCrusMesh": "/models/ear-anatomy/common-crus.obj",
