@@ -228,4 +228,44 @@ describe('cupula release integration', () => {
     expect(released).toBe(false);
     void phantomFired;
   });
+
+  /**
+   * Regression test for a real bug caught via a recorded phone-gyro trace ("gentle
+   * Dix-Hallpike (should not have released).json"): a single noisy/jittery gyro sample
+   * amid an otherwise gentle, continuous rotation momentarily spiked the instantaneous
+   * projected deceleration above threshold, and because the smoothing filter's derivative
+   * is dt-independent for dt below RELEASE_ACCEL_SMOOTHING_TAU (see this file's top doc
+   * comment), that ONE noisy sample alone was enough to fire release -- even though the
+   * surrounding samples showed no such spike. REQUIRED_CONSECUTIVE_SAMPLES fixes this by
+   * requiring the over-threshold condition to persist across samples, not just one.
+   */
+  it('does not false-trigger release from a single noisy gyro sample amid gentle motion', () => {
+    const axis = CANAL_PLANE_NORMAL.posterior.right;
+    let detector = initialReleaseDetector();
+    // A gentle, mostly-smooth ramp (all well under threshold on their own), with one
+    // isolated noisy sample spiking hard enough that -- undebounced -- it alone would fire.
+    const gentleSamplesWithOneSpike: number[] = [0.2, 0.4, 0.6, 1.3, 1.7, 1.3, 1.1, 0.6, 0.3];
+    let anyFired = false;
+    for (const projectedOmega of gentleSamplesWithOneSpike) {
+      let fired: boolean;
+      [detector, fired] = updateReleaseDetector(detector, [projectedOmega, 0, 0], axis, DT);
+      if (fired) anyFired = true;
+    }
+    expect(anyFired).toBe(false);
+  });
+
+  it('still fires when the over-threshold condition is sustained across samples', () => {
+    const axis = CANAL_PLANE_NORMAL.posterior.right;
+    let detector = initialReleaseDetector();
+    // A sustained rapid deceleration held across multiple samples, as a genuine
+    // Semont/Zuma-style flick produces -- should still release.
+    const sustainedRapidSamples: number[] = [0.1, 3.0, 3.0, 3.0];
+    let anyFired = false;
+    for (const projectedOmega of sustainedRapidSamples) {
+      let fired: boolean;
+      [detector, fired] = updateReleaseDetector(detector, [projectedOmega, 0, 0], axis, DT);
+      if (fired) anyFired = true;
+    }
+    expect(anyFired).toBe(true);
+  });
 });

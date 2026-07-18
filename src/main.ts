@@ -455,6 +455,16 @@ function stepPhysicsOnce(dt: number): void {
   // Using the REAL elapsed wall-clock time between distinct gyro samples instead fixes
   // this at the source rather than papering over it with a looser threshold.
   const sampleTimestampMs = source.sampleTimestampMs?.() ?? null;
+  // Whether this tick actually carries a NEW orientation sample. For gyro, qHead (and
+  // therefore omegaBody) is a bit-exact hold-over on ticks between real deviceorientation
+  // events -- a synthetic "zero velocity" reading, not a real measurement. Feeding that
+  // into the release detector every tick (previously done unconditionally) yanks
+  // smoothedOmega toward zero and back on every physics tick regardless of real sample
+  // rate, which produces spurious deceleration spikes unrelated to actual head motion --
+  // confirmed against a real "gentle Dix-Hallpike" recording that should not have
+  // released. Non-gyro sources (sampleTimestampMs === null) recompute orientation every
+  // physics tick for real, so they're always treated as a new sample.
+  const isNewSample = sampleTimestampMs === null || sampleTimestampMs !== prevSampleTimestampMs;
   let velocityDt = dt;
   if (sampleTimestampMs !== null && prevSampleTimestampMs !== null) {
     const elapsedSeconds = (sampleTimestampMs - prevSampleTimestampMs) / 1000;
@@ -463,7 +473,7 @@ function stepPhysicsOnce(dt: number): void {
   if (sampleTimestampMs !== null) prevSampleTimestampMs = sampleTimestampMs;
   const omegaBody = angularVelocityBody(prevQHeadForVelocity, qHead, velocityDt);
   prevQHeadForVelocity = qHead;
-  let released: boolean;
+  let released = false;
   // Interactive sources (mouse-drag/gyro) use the same threshold as scripted maneuvers
   // now that release is canal-axis-projected rather than omnidirectional -- see
   // INTERACTIVE_RELEASE_DECEL_THRESHOLD's doc comment for why the old ~3x margin is no
@@ -471,11 +481,14 @@ function stepPhysicsOnce(dt: number): void {
   const decelThreshold = mode === 'maneuver' ? RELEASE_DECEL_THRESHOLD : INTERACTIVE_RELEASE_DECEL_THRESHOLD;
   const canalAxis = CANAL_PLANE_NORMAL[selector.canal][selector.side];
   const prevSmoothedOmega = releaseDetector.smoothedOmega;
-  [releaseDetector, released] = updateReleaseDetector(releaseDetector, omegaBody, canalAxis, dt, decelThreshold);
+  if (isNewSample) {
+    [releaseDetector, released] = updateReleaseDetector(releaseDetector, omegaBody, canalAxis, dt, decelThreshold);
+  }
   // Debug telemetry (see debug/telemetry.ts) -- purely an observer, toggled from the
   // About popover, for retuning RELEASE_DECEL_THRESHOLD/INTERACTIVE_RELEASE_DECEL_THRESHOLD
-  // against real recorded sensor traces instead of guessing.
-  if (isRecording()) {
+  // against real recorded sensor traces instead of guessing. Only recorded on real samples
+  // so exported traces don't carry the held-tick zero sawtooth.
+  if (isRecording() && isNewSample) {
     const projectedOmega = omegaBody[0] * canalAxis[0] + omegaBody[1] * canalAxis[1] + omegaBody[2] * canalAxis[2];
     recordSample(simulationTimeSeconds, {
       canal: selector.canal,

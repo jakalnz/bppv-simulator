@@ -57,7 +57,50 @@ real-tangent fix ported over before that branch is usable again.
 **Still TODO:** update `notes/whitepaper.html` (this project's living physics writeup)
 with this fix, per the original investigation's next-steps list.
 
-## Still open: "too easy to trigger cupula release on gyro/mouse"
+## RESOLVED: "too easy to trigger cupula release on gyro/mouse"
+Fixed 2026-07-18 using two fresh real-phone-gyro recordings the user supplied (`docs/Gentle
+DixHallpike (should not have released).json`, `docs/Semont.json`), taken AFTER the NaN fix
+below, via `src/debug/telemetry.ts`. Two compounding root causes, both in the release
+path, not in `RELEASE_DECEL_THRESHOLD` itself (retuning was never the fix):
+
+1. **Held-tick zero-fill artifact.** `stepPhysicsOnce` (`src/main.ts`) ran the release
+   detector every physics tick (120Hz) regardless of orientation source. Device gyro
+   delivers `deviceorientation` well below 120Hz, so `qHead` (and therefore `omegaBody`)
+   is a bit-exact hold-over on ticks between real samples -- 74% of ticks in the gentle
+   recording had `projectedOmega === 0`. Feeding that synthetic zero into the smoothing
+   filter every such tick yanks `smoothedOmega` toward zero and back on every physics
+   tick, independent of real gyro sample rate, producing spurious deceleration spikes.
+   Fixed by gating both the release-detector update and telemetry recording on
+   `isNewSample` (`sampleTimestampMs !== prevSampleTimestampMs`), computed before
+   `prevSampleTimestampMs` is overwritten -- non-gyro sources (`sampleTimestampMs ===
+   null`) are unaffected and always treated as new.
+
+2. **Single-sample noise sensitivity.** Even with (1) fixed, the gentle trace still fired:
+   `updateReleaseDetector`'s smoothing formula reduces to `decel = (clampedProjected -
+   prevSmoothed) / RELEASE_ACCEL_SMOOTHING_TAU` whenever `dt < tau` (true for essentially
+   all real ticks, gyro included) -- correct continuous-time RC-filter behavior, but it
+   means a SINGLE noisy/jittery gyro sample that jumps `threshold * tau` (~1.24 rad/s) away
+   from the recent trend fires release on that one sample alone, no persistence required.
+   Confirmed in the gentle trace: a lone `-1.733 rad/s` reading amid a smooth `-0.6` to
+   `-1.3` ramp. Fixed by adding `REQUIRED_CONSECUTIVE_SAMPLES = 2` in
+   `src/physics/cupulaRelease.ts`: the instantaneous over-threshold test must hold for 2
+   consecutive REAL samples (not ticks) before firing; re-arms once the instantaneous test
+   drops false again.
+
+Verified by replaying both recordings through the actual (not reimplemented)
+`updateReleaseDetector`: gentle Dix-Hallpike now fires 0 times (was 2); Semont still fires
+6 times, first one during the genuine liberatory flick. All 84 existing tests still pass
+unmodified; added 2 new regression tests in `cupulaRelease.test.ts` (`does not
+false-trigger release from a single noisy gyro sample amid gentle motion`, `still fires
+when the over-threshold condition is sustained across samples`) encoding this pattern
+without needing to check in the full JSON recordings.
+
+**Not investigated further:** whether `REQUIRED_CONSECUTIVE_SAMPLES = 2` is exactly right
+long-term, or whether it should be tied to real elapsed time (a debounce window in seconds)
+rather than sample count -- 2 was sufficient for both supplied recordings and is a small,
+reversible constant if it needs retuning against future recordings.
+
+## Archived: original still-open note (superseded by RESOLVED section above)
 This is a SEPARATE, still-undiagnosed complaint from the same session. Added a debug
 telemetry recorder (`src/debug/telemetry.ts`, commit `2cb637c`): a Start/Stop recording +
 Export JSON control in the canal panel's About popover, logging per-tick

@@ -24,16 +24,39 @@ import {
  * discontinuities, and is also what protects against a single noisy/bursty sample from
  * ANY orientation source, including mouse-drag/gyro, which apply raw input-event deltas
  * immediately with no smoothing of their own.
+ *
+ * That smoothing alone isn't enough to reject a single noisy SAMPLE (as opposed to a
+ * single noisy TICK, which MAX_PLAUSIBLE_ANGULAR_SPEED already handles): because
+ * `smoothedOmega`'s per-call increment is `(clampedProjected - prev) * min(1, dt/tau)`,
+ * for any dt below RELEASE_ACCEL_SMOOTHING_TAU the resulting `decel` reduces to
+ * `(clampedProjected - prev) / tau`, independent of dt. That's the correct continuous-time
+ * behavior for an RC low-pass filter, but it also means a single isolated sample that
+ * jumps `threshold * tau` rad/s away from the recent trend -- plausible sensor jitter on a
+ * real phone gyro, confirmed against a real "gentle Dix-Hallpike" recording that should
+ * not have released -- fires the detector on that one sample alone, with no requirement
+ * that the deceleration actually persist. REQUIRED_CONSECUTIVE_SAMPLES below fixes this by
+ * requiring the instantaneous over-threshold condition to hold for several samples in a
+ * row (still real ones -- see main.ts's held-tick gating) before firing, which a single
+ * noisy sample amid an otherwise gentle trace won't do, while a genuine rapid
+ * Semont/Zuma-style deceleration comfortably does.
  */
 export interface CupulaReleaseDetector {
   /** Low-pass-filtered canal-axis-projected angular velocity (rad/s), signed. */
   smoothedOmega: number;
-  /** Whether the smoothed |acceleration| is currently above threshold (for edge detection). */
+  /** Whether the debounced condition has already fired for the current excursion (for edge detection). */
   above: boolean;
+  /** Consecutive samples (not ticks) the instantaneous |decel| has been over threshold. */
+  consecutiveAboveCount: number;
 }
 
+/**
+ * How many consecutive samples the instantaneous over-threshold condition must hold
+ * before firing -- see this file's top doc comment for why a single sample isn't enough.
+ */
+const REQUIRED_CONSECUTIVE_SAMPLES = 2;
+
 export function initialReleaseDetector(): CupulaReleaseDetector {
-  return { smoothedOmega: 0, above: false };
+  return { smoothedOmega: 0, above: false, consecutiveAboveCount: 0 };
 }
 
 /**
@@ -64,8 +87,14 @@ export function updateReleaseDetector(
     state.smoothedOmega + (clampedProjected - state.smoothedOmega) * Math.min(1, dt / RELEASE_ACCEL_SMOOTHING_TAU);
 
   const decel = (smoothedOmega - state.smoothedOmega) / dt;
-  const above = Math.abs(decel) > decelThreshold;
-  const fired = above && !state.above;
+  const instantAbove = Math.abs(decel) > decelThreshold;
+  const consecutiveAboveCount = instantAbove ? state.consecutiveAboveCount + 1 : 0;
+  const qualifies = consecutiveAboveCount >= REQUIRED_CONSECUTIVE_SAMPLES;
+  // Re-arms only once the instantaneous condition drops back below threshold, same as
+  // before debouncing was added -- `above` here tracks "already fired for this
+  // excursion", not the instantaneous test.
+  const above = instantAbove && (state.above || qualifies);
+  const fired = qualifies && !state.above;
 
-  return [{ smoothedOmega, above }, fired];
+  return [{ smoothedOmega, above, consecutiveAboveCount }, fired];
 }
